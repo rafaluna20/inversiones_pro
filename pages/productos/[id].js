@@ -369,6 +369,8 @@ const RutaWeb = styled.div`
 const ListaComentarios = styled.div`
   padding: 30px;
   border: 1px solid #e1e1e1;
+  max-height: 500px;
+  overflow-y: auto;
 `;
 const BotonVotar = styled.a`
   display: block;
