@@ -1,0 +1,63 @@
+﻿__tests__/lib/aporte-suelo.test.ts(8,3): error TS2724: '"@/lib/aporte-suelo"' has no exported member named 'calcularDistribucionGanancias'. Did you mean 'simularDistribucionGanancias'?
+__tests__/lib/aporte-suelo.test.ts(9,3): error TS2305: Module '"@/lib/aporte-suelo"' has no exported member 'calcularROI'.
+components/dashboard/DashboardSocioEjemplo.tsx(44,8): error TS2307: Cannot find module 'lucide-react' or its corresponding type declarations.
+Hooks/useMisInversiones.ts(15,20): error TS2307: Cannot find module '@/firebase/config' or its corresponding type declarations.
+Hooks/useProyectoBifasico.ts(15,20): error TS2307: Cannot find module '@/firebase/config' or its corresponding type declarations.
+lib/aporte-suelo.ts(20,20): error TS2307: Cannot find module '@/firebase/config' or its corresponding type declarations.
+lib/aporte-suelo.ts(259,15): error TS2554: Expected 3-4 arguments, but got 1.
+lib/firebase/documentos.ts(31,29): error TS2307: Cannot find module '@/firebase/config' or its corresponding type declarations.
+lib/firebase/documentos.ts(335,45): error TS2307: Cannot find module 'jspdf' or its corresponding type declarations.
+lib/firebase/proyectos-bifasicos.ts(25,20): error TS2307: Cannot find module '@/firebase/config' or its corresponding type declarations.
+lib/firebase/proyectos-bifasicos.ts(27,10): error TS2305: Module '"@/lib/billetera-api"' has no exported member 'crearTransaccionOdoo'.
+lib/firebase/proyectos-bifasicos.ts(27,32): error TS2305: Module '"@/lib/billetera-api"' has no exported member 'confirmarTransaccionOdoo'.
+lib/performance/batching.ts(122,8): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/performance/batching.ts(163,8): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/performance/batching.ts(206,8): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/performance/batching.ts(252,8): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/performance/batching.ts(299,8): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/performance/batching.ts(338,69): error TS2345: Argument of type 'number | { toDate: () => Date; }' is not assignable to parameter of type 'string'.
+  Type 'number' is not assignable to type 'string'.
+lib/performance/batching.ts(342,3): error TS2322: Type '{ creador: Usuario; id: string; nombre: string; empresa: string; url: string; urlimagen: string | string[]; descripcion: string; votos: number | string[]; comentarios: Comentario[]; ... 20 more ...; updatedAt?: number | undefined; }[]' is not assignable to type '(Producto & { creador: Usuario; })[]'.
+  Type '{ creador: Usuario; id: string; nombre: string; empresa: string; url: string; urlimagen: string | string[]; descripcion: string; votos: string[] | number; comentarios: Comentario[]; ... 20 more ...; updatedAt?: number; }' is not assignable to type 'Producto & { creador: Usuario; }'.
+    Type '{ creador: Usuario; id: string; nombre: string; empresa: string; url: string; urlimagen: string | string[]; descripcion: string; votos: string[] | number; comentarios: Comentario[]; ... 20 more ...; updatedAt?: number; }' is not assignable to type 'Producto'.
+      Types of property 'creador' are incompatible.
+        Property 'id' is missing in type 'Usuario' but required in type 'Creador'.
+lib/performance/batching.ts(344,48): error TS2345: Argument of type 'number | { toDate: () => Date; }' is not assignable to parameter of type 'string'.
+  Type 'number' is not assignable to type 'string'.
+lib/performance/batching.ts(400,56): error TS2339: Property 'id' does not exist on type 'Usuario'.
+lib/resilience/pagination.ts(87,18): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/resilience/pagination.ts(173,18): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/resilience/pagination.ts(219,18): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/resilience/pagination.ts(279,18): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/resilience/reconciliation.ts(66,8): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/resilience/reconciliation.ts(142,19): error TS2339: Property 'estado' does not exist on type 'Inversion'.
+lib/resilience/reconciliation.ts(142,55): error TS2339: Property 'odooTransactionId' does not exist on type 'Inversion'.
+lib/resilience/reconciliation.ts(149,86): error TS2339: Property 'montoTotal' does not exist on type 'Inversion'.
+lib/resilience/reconciliation.ts(156,34): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/resilience/reconciliation.ts(161,21): error TS2339: Property 'estado' does not exist on type 'Inversion'.
+lib/resilience/reconciliation.ts(173,19): error TS2339: Property 'estado' does not exist on type 'Inversion'.
+lib/resilience/reconciliation.ts(175,34): error TS2554: Expected 2 arguments, but got 1.
+lib/resilience/reconciliation.ts(204,8): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/resilience/reconciliation.ts(213,10): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/resilience/reconciliation.ts(305,8): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/resilience/reconciliation.ts(322,14): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/resilience/reconciliation.ts(346,14): error TS2339: Property 'collection' does not exist on type 'Firestore'.
+lib/security/encryption.ts(158,7): error TS2862: Type 'T' is generic and can only be indexed for reading.
+lib/security/encryption.ts(186,11): error TS2862: Type 'T' is generic and can only be indexed for reading.
+lib/security/encryption.ts(188,11): error TS2862: Type 'T' is generic and can only be indexed for reading.
+lib/security/rate-limiter.ts(65,33): error TS2339: Property 'rateLimit' does not exist on type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+lib/security/rate-limiter.ts(66,14): error TS2339: Property 'rateLimit' does not exist on type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+lib/security/rate-limiter.ts(97,33): error TS2339: Property 'rateLimit' does not exist on type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+lib/security/rate-limiter.ts(98,14): error TS2339: Property 'rateLimit' does not exist on type 'Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>'.
+lib/security/rbac.ts(105,8): error TS2448: Block-scoped variable 'PERMISOS_POR_ROL' used before its declaration.
+lib/security/rbac.ts(105,8): error TS2454: Variable 'PERMISOS_POR_ROL' is used before being assigned.
+lib/security/rbac.ts(112,8): error TS2448: Block-scoped variable 'PERMISOS_POR_ROL' used before its declaration.
+lib/security/rbac.ts(112,8): error TS2454: Variable 'PERMISOS_POR_ROL' is used before being assigned.
+lib/security/rbac.ts(120,8): error TS2448: Block-scoped variable 'PERMISOS_POR_ROL' used before its declaration.
+lib/security/rbac.ts(120,8): error TS2454: Variable 'PERMISOS_POR_ROL' is used before being assigned.
+lib/security/rbac.ts(125,8): error TS2448: Block-scoped variable 'PERMISOS_POR_ROL' used before its declaration.
+lib/security/rbac.ts(125,8): error TS2454: Variable 'PERMISOS_POR_ROL' is used before being assigned.
+lib/security/rbac.ts(131,8): error TS2448: Block-scoped variable 'PERMISOS_POR_ROL' used before its declaration.
+lib/security/rbac.ts(131,8): error TS2454: Variable 'PERMISOS_POR_ROL' is used before being assigned.
+lib/security/rbac.ts(146,8): error TS2448: Block-scoped variable 'PERMISOS_POR_ROL' used before its declaration.
+lib/security/rbac.ts(146,8): error TS2454: Variable 'PERMISOS_POR_ROL' is used before being assigned.

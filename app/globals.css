@@ -1,0 +1,381 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css");
+
+/* Variables CSS personalizadas */
+:root {
+  --colorBarraSuperior: #1e3a8a;
+  --colorFondo: #0f172a;
+  --colorTexto: #f1f5f9;
+  --colorAccent: #3b82f6;
+
+  /* Legacy Variables */
+  --gris: #3d3d3d;
+  --gris2: #6f6f6f;
+  --gris3: #e1e1e1;
+  --naranja: #da552f;
+  --grisBotones: #1e2229;
+  --contBoton: #13161c;
+  --contCard: #1e2229;
+  --colorBuscar: #010101;
+  --botones: #9858ff;
+  --fondoBilletera: #3700b3;
+  --botonesBilletera: #6200ee;
+}
+
+/* Estilos base */
+@layer base {
+  html {
+    @apply scroll-smooth;
+    font-size: 62.5%;
+    /* Restore legacy base font size */
+  }
+
+  body {
+    @apply text-gray-100 antialiased;
+    background-color: var(--contCard);
+    font-family: var(--font-pt-sans), sans-serif;
+    font-size: 1.6rem;
+  }
+
+  h1,
+  h2 {
+    font-family: var(--font-roboto-slab), serif;
+  }
+
+  h1 {
+    @apply text-4xl font-bold;
+  }
+
+  h2 {
+    @apply text-3xl font-semibold;
+  }
+
+  h3 {
+    @apply text-2xl font-semibold;
+  }
+
+  h4 {
+    @apply text-xl font-medium;
+  }
+
+  p {
+    @apply text-base leading-relaxed;
+  }
+}
+
+/* Componentes reutilizables */
+@layer components {
+
+  /* Botones */
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-white hover:bg-primary-dark active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary text-white hover:bg-secondary-dark active:scale-95;
+  }
+
+  .btn-danger {
+    @apply bg-danger text-white hover:bg-danger-dark active:scale-95;
+  }
+
+  .btn-success {
+    @apply bg-success text-white hover:bg-success-dark active:scale-95;
+  }
+
+  .btn-outline {
+    @apply border-2 border-primary text-primary hover:bg-primary hover:text-white active:scale-95;
+  }
+
+  /* Cards */
+  .card {
+    @apply bg-[#13161c] border border-[#4b4b4b] rounded-[20px] shadow-md p-6 transition-shadow hover:shadow-lg text-gray-100;
+  }
+
+  .card-dark {
+    @apply bg-gray-800 text-white rounded-xl shadow-md p-6 transition-shadow hover:shadow-lg;
+  }
+
+  /* Inputs */
+  .input {
+    @apply w-full px-4 py-2 bg-[#1e2229] border border-[#4b4b4b] text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none placeholder-gray-500;
+  }
+
+  .input-error {
+    @apply border-red-500 focus:ring-red-500;
+  }
+
+  /* Labels */
+  .label {
+    @apply block text-sm font-medium text-gray-300 mb-1;
+  }
+
+  /* Containers */
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Gradients */
+  .gradient-primary {
+    @apply bg-gradient-to-r from-primary to-secondary;
+  }
+
+  .gradient-dark {
+    @apply bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    @apply animate-spin rounded-full border-4 border-gray-200 border-t-primary;
+  }
+
+  /* Skeleton loader */
+  .skeleton {
+    @apply animate-pulse bg-gray-200 rounded;
+  }
+}
+
+/* Utilidades personalizadas */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .glassmorphism {
+    @apply backdrop-blur-md bg-white/30 border border-white/20;
+  }
+}
+
+/* Animaciones personalizadas */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+.animate-slideIn {
+  animation: slideIn 0.3s ease-out;
+}
+
+.animate-slideDown {
+  animation: slideDown 0.2s ease-out;
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.2s ease-out;
+}
+
+.animate-pulse-slow {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Estilos para Command Palette (cmdk) */
+[cmdk-root] {
+  max-width: 100%;
+}
+
+[cmdk-dialog] {
+  z-index: 9999;
+}
+
+[cmdk-overlay] {
+  background: rgba(0, 0, 0, 0.5);
+  position: fixed;
+  inset: 0;
+  animation: fadeIn 0.2s ease-out;
+  z-index: 9998;
+}
+
+[cmdk-input] {
+  font-family: var(--font-pt-sans), sans-serif;
+  font-size: 1.6rem;
+}
+
+[cmdk-list] {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(71 85 105) transparent;
+}
+
+[cmdk-list]::-webkit-scrollbar {
+  width: 8px;
+}
+
+[cmdk-list]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[cmdk-list]::-webkit-scrollbar-thumb {
+  background: rgb(71 85 105);
+  border-radius: 4px;
+}
+
+[cmdk-list]::-webkit-scrollbar-thumb:hover {
+  background: rgb(100 116 139);
+}
+
+[cmdk-item][data-selected="true"] {
+  background-color: rgb(51 65 85 / 0.5);
+}
+
+[cmdk-item]:active {
+  background-color: rgb(51 65 85 / 0.7);
+}
+
+[cmdk-separator] {
+  height: 1px;
+  background: rgb(51 65 85);
+  margin: 8px 0;
+}
+
+[cmdk-group-heading] {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgb(148 163 184);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 0.75rem;
+}
+
+/* Soporte para modo oscuro */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --colorBarraSuperior: #1e3a8a;
+    --colorFondo: #0f172a;
+    --colorTexto: #f1f5f9;
+  }
+}
+
+/* Estilos para impresión / Reporte de Cierre PDF */
+@media print {
+
+  /* Ocultar todo excepto el reporte */
+  body > *:not(#__next),
+  nav,
+  header,
+  footer,
+  aside,
+  .no-print,
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Resetear fondo a blanco */
+  html, body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    font-size: 12px !important;
+  }
+
+  /* Solo mostrar el reporte */
+  #closure-report {
+    display: block !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    border-radius: 0 !important;
+  }
+
+  /* Encabezado del reporte en impresión */
+  #closure-report thead {
+    display: table-header-group;
+  }
+
+  /* Evitar cortes en filas de tabla */
+  #closure-report tr {
+    page-break-inside: avoid;
+  }
+
+  /* Forzar colores en impresión */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ocultar barra de navegación superior y sidebar */
+  [class*="NavBar"],
+  [class*="Sidebar"],
+  [class*="MobileInvestmentCTA"],
+  [class*="InvestmentCard"] {
+    display: none !important;
+  }
+
+  /* Ajustar márgenes de página */
+  @page {
+    margin: 15mm 20mm;
+    size: A4 portrait;
+  }
+}
+

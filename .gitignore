@@ -25,7 +25,14 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
+.env
+.env.local
 .env*.local
+
+# Firebase
+firebase-debug.log
+firestore-debug.log
+.firebase/
 
 # vercel
 .vercel
@@ -33,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Temp Legacy Repo
+temp_legacy/
