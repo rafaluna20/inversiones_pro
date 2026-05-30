@@ -1,17 +1,17 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FaHome, FaFire, FaSearch, FaWallet } from 'react-icons/fa';
+import { FaHome, FaFire, FaSearch, FaWallet, FaBriefcase } from 'react-icons/fa';
 
 export default function BottomNav() {
     const pathname = usePathname();
 
     const navigation = [
         { name: 'Inicio', href: '/', icon: FaHome },
-        { name: 'Populares', href: '/populares', icon: FaFire },
         { name: 'Buscar', href: '/buscar', icon: FaSearch },
         { name: 'Billetera', href: '/billetera', icon: FaWallet },
+        { name: 'Gestor', href: '/gestor', icon: FaBriefcase },
     ];
 
     return (

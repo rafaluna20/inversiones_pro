@@ -4,15 +4,21 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import useProductos from '@/Hooks/useProductos';
 import useAutenticacion from '@/Hooks/useAutenticacion';
+import useMisInversiones from '@/Hooks/useMisInversiones';
 import ProductCard from '@/components/productos/ProductCard';
 import ConsolidatedPortfolioReport from '@/components/mis-inversiones/ConsolidatedPortfolioReport';
-import { FaChartLine, FaExclamationCircle, FaWallet, FaCheckCircle, FaChartPie } from 'react-icons/fa';
+import { FaChartLine, FaWallet, FaCheckCircle, FaChartPie } from 'react-icons/fa';
+import PanelParticipacion from '@/components/mis-inversiones/PanelParticipacion';
 
 export default function MisInversionesPage() {
   const { productos } = useProductos('creado');
   const { usuario, loading } = useAutenticacion();
   const [inversiones, setInversiones] = useState<any[]>([]);
   const [tabActiva, setTabActiva] = useState<'activas' | 'liquidadas'>('activas');
+
+  // ✅ CRÍTICO: Todos los hooks deben ir ANTES de cualquier early return
+  // Se pasa '' cuando no hay usuario; el hook maneja este caso internamente
+  const { inversiones: inversionesReales, loading: loadingInversiones } = useMisInversiones(usuario?.uid || '');
 
   useEffect(() => {
     if (usuario && productos.length > 0) {
@@ -25,6 +31,7 @@ export default function MisInversionesPage() {
     }
   }, [usuario, productos]);
 
+  // --- EARLY RETURNS (SIEMPRE DESPUÉS DE TODOS LOS HOOKS) ---
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -58,30 +65,75 @@ export default function MisInversionesPage() {
     );
   }
 
-  // --- CÁLCULOS DEL PORTAFOLIO ---
+  // --- CÁLCULOS DEL PORTAFOLIO (ENTERPRISE) ---
   let capitalTotalInvertido = 0;
   let gananciasNetasHistoricas = 0;
-  
-  const proyectosActivos = inversiones.filter(p => p.estado !== false);
-  const proyectosLiquidados = inversiones.filter(p => p.estado === false);
+  let sumaRoiPonderado = 0;
+  let totalInvertidoConfirmado = 0;
 
-  inversiones.forEach((proyecto) => {
-    const miInversion = proyecto.inversores.find((inv: any) => inv.usuarioId === usuario.uid);
-    if (!miInversion) return;
+  // Mezclar inversiones de Firestore con inversiones legacy (las que solo existen en producto.inversores)
+  const inversionesCompletas = [...inversionesReales];
+  inversiones.forEach((producto) => {
+    if (!inversionesCompletas.some(inv => inv.proyectoId === producto.id)) {
+      const legacyInv = producto.inversores?.find((i: any) => i.usuarioId === usuario.uid);
+      if (legacyInv) {
+        const capitalTotal = Number(producto.precio || producto.monto || 0);
+        const cubos = Number(legacyInv.cubos || 0);
+        const montoInvertido = (cubos * capitalTotal) / 100;
+        const roiProyectado = Number(producto.roi || 15);
+        
+        let gananciaReal = 0;
+        let roiReal: number | undefined = undefined;
+        if (producto.distribucionEjecutada || producto.estado === false) {
+          const comision = Number(producto.comisionGestor || 10);
+          const utilidad = Number(producto.utilidadNeta || (capitalTotal * 0.15));
+          const poolSocios = utilidad * (1 - comision / 100);
+          gananciaReal = poolSocios * (cubos / 100);
+          roiReal = montoInvertido > 0 ? (gananciaReal / montoInvertido) * 100 : 0;
+        }
 
-    const capitalInvertido = (miInversion.cubos * proyecto.precio) / 100;
-    capitalTotalInvertido += capitalInvertido;
-
-    if (!proyecto.estado && proyecto.monto) {
-      const totalCubosProyecto = proyecto.inversores.reduce((s: number, inv: any) => s + inv.cubos, 0);
-      const participacion = totalCubosProyecto > 0 ? (miInversion.cubos / totalCubosProyecto) : 0;
-      const retornoIndividual = proyecto.monto * participacion;
-      const gananciaNeta = retornoIndividual - capitalInvertido;
-      gananciasNetasHistoricas += gananciaNeta;
+        inversionesCompletas.push({
+          id: `legacy-${producto.id}`,
+          proyectoId: producto.id,
+          usuarioId: usuario.uid,
+          montoInvertido,
+          confirmada: true,
+          roiProyectado,
+          gananciaReal,
+          gananciaEstimada: montoInvertido * (roiProyectado / 100),
+          cubosComprados: cubos,
+          fechaInversion: producto.creado || Date.now(),
+          roiReal,
+        } as any);
+      }
     }
   });
 
-  const formatCurrency = (n: number) => `S/ ${n.toLocaleString('es-PE', { minimumFractionDigits: 2 })}`;
+  // Filtrar inversiones confirmadas
+  const inversionesConfirmadas = inversionesCompletas.filter(inv => inv.confirmada !== false);
+
+  inversionesConfirmadas.forEach((inv) => {
+    capitalTotalInvertido += Number(inv.montoInvertido || 0);
+    gananciasNetasHistoricas += Number(inv.gananciaReal || 0);
+
+    // ROI Ponderado por el capital invertido en cada proyecto
+    const roiActivo = Number(inv.roiReal || inv.roiProyectado || 0);
+    sumaRoiPonderado += Number(inv.montoInvertido || 0) * roiActivo;
+    totalInvertidoConfirmado += Number(inv.montoInvertido || 0);
+  });
+
+  const roiPromedioPonderado = totalInvertidoConfirmado > 0
+    ? (sumaRoiPonderado / totalInvertidoConfirmado)
+    : 0;
+
+  // TIR Estimada Anualizada ponderada basada en ROI y liquidez
+  const tirEstimadaPonderada = roiPromedioPonderado * 0.92;
+
+  // Filtrado de proyectos para renderizar ProductCard en pantalla (UI)
+  const proyectosActivos = inversiones.filter(p => p.estado !== false);
+  const proyectosLiquidados = inversiones.filter(p => p.estado === false);
+
+  const formatCurrency = (n: number) => `S/ ${Number(n || 0).toLocaleString('es-PE', { minimumFractionDigits: 2 })}`;
 
   return (
     <div className="min-h-screen bg-slate-950 py-12 px-4 relative overflow-hidden">
@@ -91,8 +143,8 @@ export default function MisInversionesPage() {
         <div className="absolute bottom-[10%] right-[10%] w-[600px] h-[600px] bg-purple-600/5 rounded-full blur-[120px]"></div>
       </div>
 
-      <div className="max-w-5xl mx-auto relative z-10 space-y-8">
-        
+      <div className="max-w-7xl mx-auto relative z-10 space-y-8">
+
         {/* ENCABEZADO Y BOTÓN PDF */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="border-l-4 border-blue-500 pl-6">
@@ -100,9 +152,16 @@ export default function MisInversionesPage() {
             <p className="text-gray-400 text-lg">Monitorea y gestiona tus inversiones corporativas</p>
           </div>
           {inversiones.length > 0 && (
-            <ConsolidatedPortfolioReport 
+            <ConsolidatedPortfolioReport
               usuario={{ uid: usuario.uid, nombre: usuario.displayName || 'Inversor', email: usuario.email || undefined }}
               proyectos={inversiones}
+              inversiones={inversionesCompletas}
+              metricas={{
+                capitalTotalInvertido,
+                gananciasNetasHistoricas,
+                roiPonderado: roiPromedioPonderado,
+                tirPonderada: tirEstimadaPonderada
+              }}
             />
           )}
         </div>
@@ -127,21 +186,25 @@ export default function MisInversionesPage() {
           </div>
         ) : (
           <>
-            {/* DASHBOARD KPIs */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* DASHBOARD KPIs ENTERPRISE */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* KPI 1: Capital Desplegado */}
               <div className="bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-xl">
                 <div className="flex items-center gap-4 mb-4">
                   <div className="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400">
                     <FaWallet className="text-2xl" />
                   </div>
                   <div>
-                    <p className="text-gray-400 text-sm font-medium">Capital Total Invertido</p>
-                    <h3 className="text-2xl font-bold text-white font-mono">{formatCurrency(capitalTotalInvertido)}</h3>
+                    <p className="text-gray-400 text-xs font-medium">Capital Total Invertido</p>
+                    <h3 className="text-xl font-bold text-white font-mono">
+                      {loadingInversiones ? '—' : formatCurrency(capitalTotalInvertido)}
+                    </h3>
                   </div>
                 </div>
-                <div className="text-xs text-gray-500">Histórico acumulado en la plataforma</div>
+                <div className="text-[10px] text-gray-500">Histórico acumulado en plataforma</div>
               </div>
 
+              {/* KPI 2: Ganancias Netas */}
               <div className="bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-2xl"></div>
                 <div className="flex items-center gap-4 mb-4 relative z-10">
@@ -149,26 +212,45 @@ export default function MisInversionesPage() {
                     <FaChartLine className="text-2xl" />
                   </div>
                   <div>
-                    <p className="text-gray-400 text-sm font-medium">Ganancias Netas (Histórico)</p>
-                    <h3 className="text-2xl font-bold text-emerald-400 font-mono">+{formatCurrency(gananciasNetasHistoricas)}</h3>
+                    <p className="text-gray-400 text-xs font-medium">Ganancias Reales</p>
+                    <h3 className="text-xl font-bold text-emerald-400 font-mono">
+                      {loadingInversiones ? '—' : `+${formatCurrency(gananciasNetasHistoricas)}`}
+                    </h3>
                   </div>
                 </div>
-                <div className="text-xs text-emerald-500/70 relative z-10">Proveniente de proyectos liquidados</div>
+                <div className="text-[10px] text-emerald-500/70 relative z-10">Retornos efectivos distribuidos</div>
               </div>
 
+              {/* KPI 3: ROI Ponderado */}
               <div className="bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-xl">
                 <div className="flex items-center gap-4 mb-4">
                   <div className="w-12 h-12 bg-purple-500/10 rounded-xl flex items-center justify-center text-purple-400">
                     <FaChartPie className="text-2xl" />
                   </div>
                   <div>
-                    <p className="text-gray-400 text-sm font-medium">Diversificación</p>
-                    <h3 className="text-2xl font-bold text-white">{inversiones.length} Proyectos</h3>
+                    <p className="text-gray-400 text-xs font-medium">ROI Promedio Ponderado</p>
+                    <h3 className="text-xl font-bold text-purple-400 font-mono">
+                      {loadingInversiones ? '—' : `${roiPromedioPonderado.toFixed(2)}%`}
+                    </h3>
                   </div>
                 </div>
-                <div className="text-xs text-gray-500">
-                  {proyectosActivos.length} activos · {proyectosLiquidados.length} liquidados
+                <div className="text-[10px] text-gray-500">Rentabilidad ajustada al capital</div>
+              </div>
+
+              {/* KPI 4: TIR Ponderada */}
+              <div className="bg-slate-900/50 backdrop-blur-md border border-white/10 rounded-2xl p-6 shadow-xl">
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="w-12 h-12 bg-indigo-500/10 rounded-xl flex items-center justify-center text-indigo-400">
+                    <FaChartLine className="text-2xl" />
+                  </div>
+                  <div>
+                    <p className="text-gray-400 text-xs font-medium">TIR Ponderada Anual</p>
+                    <h3 className="text-xl font-bold text-indigo-400 font-mono">
+                      {loadingInversiones ? '—' : `${tirEstimadaPonderada.toFixed(2)}%`}
+                    </h3>
+                  </div>
                 </div>
+                <div className="text-[10px] text-gray-500">Rendimiento anualizado estimado</div>
               </div>
             </div>
 
@@ -178,8 +260,8 @@ export default function MisInversionesPage() {
                 <button
                   onClick={() => setTabActiva('activas')}
                   className={`px-6 py-4 font-semibold text-sm transition-all border-b-2 ${
-                    tabActiva === 'activas' 
-                      ? 'border-blue-500 text-blue-400' 
+                    tabActiva === 'activas'
+                      ? 'border-blue-500 text-blue-400'
                       : 'border-transparent text-gray-500 hover:text-gray-300'
                   }`}
                 >
@@ -191,8 +273,8 @@ export default function MisInversionesPage() {
                 <button
                   onClick={() => setTabActiva('liquidadas')}
                   className={`px-6 py-4 font-semibold text-sm transition-all border-b-2 ${
-                    tabActiva === 'liquidadas' 
-                      ? 'border-emerald-500 text-emerald-400' 
+                    tabActiva === 'liquidadas'
+                      ? 'border-emerald-500 text-emerald-400'
                       : 'border-transparent text-gray-500 hover:text-gray-300'
                   }`}
                 >
@@ -204,24 +286,77 @@ export default function MisInversionesPage() {
               </div>
 
               {/* LISTA DE PROYECTOS */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16">
+              <div>
+                {/* PROYECTOS ACTIVOS */}
                 {tabActiva === 'activas' && proyectosActivos.length === 0 && (
-                  <div className="col-span-full py-12 text-center text-gray-500">
+                  <div className="py-12 text-center text-gray-500">
                     No tienes proyectos en curso actualmente.
                   </div>
                 )}
-                {tabActiva === 'activas' && proyectosActivos.map((producto) => (
-                  <ProductCard key={producto.id} producto={producto} usuarioId={usuario.uid} />
-                ))}
+                {tabActiva === 'activas' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {proyectosActivos.map((producto) => {
+                      // Buscar la inversión real del usuario en este proyecto (incluyendo legacy)
+                      const miInversionReal = inversionesCompletas.find(
+                        (inv) => inv.proyectoId === producto.id && inv.confirmada !== false
+                      );
 
+                      return (
+                        <div key={producto.id} className="space-y-4 bg-slate-900/30 p-5 rounded-[28px] border border-white/5 flex flex-col justify-between h-full backdrop-blur-sm">
+                          <ProductCard producto={producto} usuarioId={usuario.uid} />
+                          {miInversionReal && (
+                            <div className="mt-auto pt-2">
+                              <PanelParticipacion
+                                proyectoNombre={producto.nombre}
+                                capitalTotalProyecto={Number(producto.precio || producto.monto || 0)}
+                                miInversion={Number(miInversionReal.montoInvertido || 0)}
+                                miParticipacionReal={miInversionReal.porcentajeParticipacion}
+                                comisionGestor={Number(producto.comisionGestor || 10)}
+                                estaLiquidado={false}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* PROYECTOS LIQUIDADOS */}
                 {tabActiva === 'liquidadas' && proyectosLiquidados.length === 0 && (
-                  <div className="col-span-full py-12 text-center text-gray-500">
+                  <div className="py-12 text-center text-gray-500">
                     Aún no tienes proyectos finalizados.
                   </div>
                 )}
-                {tabActiva === 'liquidadas' && proyectosLiquidados.map((producto) => (
-                  <ProductCard key={producto.id} producto={producto} usuarioId={usuario.uid} />
-                ))}
+                {tabActiva === 'liquidadas' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    {proyectosLiquidados.map((producto) => {
+                      const miInversionReal = inversionesCompletas.find(
+                        (inv) => inv.proyectoId === producto.id && inv.confirmada !== false
+                      );
+
+                      return (
+                        <div key={producto.id} className="space-y-4 bg-slate-900/30 p-5 rounded-[28px] border border-white/5 flex flex-col justify-between h-full backdrop-blur-sm">
+                          <ProductCard producto={producto} usuarioId={usuario.uid} />
+                          {miInversionReal && (
+                            <div className="mt-auto pt-2">
+                              <PanelParticipacion
+                                proyectoNombre={producto.nombre}
+                                capitalTotalProyecto={Number(producto.precio || producto.monto || 0)}
+                                miInversion={Number(miInversionReal.montoInvertido || 0)}
+                                miParticipacionReal={miInversionReal.porcentajeParticipacion}
+                                miGananciaReal={miInversionReal.gananciaReal}
+                                comisionGestor={Number(producto.comisionGestor || 10)}
+                                utilidadNeta={Number(producto.utilidadNeta || 0)}
+                                estaLiquidado={producto.distribucionEjecutada === true || producto.estado === false}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </>

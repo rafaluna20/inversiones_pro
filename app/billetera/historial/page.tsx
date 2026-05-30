@@ -7,14 +7,9 @@ import useTokenBilletera from '@/Hooks/useTokenBilletera';
 import { formatearFecha } from '@/lib/billetera-api';
 import Link from 'next/link';
 import { FaArrowLeft, FaHistory, FaArrowDown, FaArrowUp, FaExchangeAlt, FaMoneyBillWave, FaCheckCircle, FaClock } from 'react-icons/fa';
+import { obtenerMovimientosPlataforma } from '@/lib/firebase/obtenerMovimientosPlataforma';
 
-// Mock Data para modo Firebase
-const mockTransacciones = [
-  { id: 1, tipo: 'recarga', monto: 500, fecha: '2023-10-25', estado: 'completado', detalle: 'Recarga de saldo' },
-  { id: 2, tipo: 'inversion', monto: -200, fecha: '2023-10-26', estado: 'completado', detalle: 'Inversión en Proyecto Alpha' },
-  { id: 3, tipo: 'retiro', monto: -100, fecha: '2023-10-28', estado: 'pendiente', detalle: 'Solicitud de retiro' },
-  { id: 4, tipo: 'transferencia', monto: -50, fecha: '2023-10-29', estado: 'completado', detalle: 'Envío a Juan Perez' },
-];
+// Sin datos simulados. Se cargan movimientos reales de Firebase.
 
 const getTransactionStyle = (tipo: string, monto: number) => {
   // Detectar dirección de transferencia por el monto
@@ -68,11 +63,24 @@ const getTransactionStyle = (tipo: string, monto: number) => {
 
 export default function HistorialBilleteraPage() {
   const searchParams = useSearchParams();
+  const queryFiltro = searchParams.get('filtro');
   const { usuario, loading } = useAutenticacion();
   const { isAuthenticated } = useTokenBilletera();
-  const [transacciones, setTransacciones] = useState<any[]>([]);
+  
+  // Estados para las sub-cuentas
+  const [filtroActivo, setFiltroActivo] = useState<'plataforma' | 'odoo'>('plataforma');
+  const [movimientosPlataforma, setMovimientosPlataforma] = useState<any[]>([]);
+  const [movimientosOdoo, setMovimientosOdoo] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
-  const [usandoAPI, setUsandoAPI] = useState(false);
+
+  // Sincronizar pestaña inicial desde query params
+  useEffect(() => {
+    if (queryFiltro === 'odoo' && isAuthenticated) {
+      setFiltroActivo('odoo');
+    } else {
+      setFiltroActivo('plataforma');
+    }
+  }, [queryFiltro, isAuthenticated]);
 
   // Token query param support removed as it is insecure
 
@@ -81,36 +89,42 @@ export default function HistorialBilleteraPage() {
     const fetchHistorial = async () => {
       setLoadingData(true);
 
-      // Si está autenticado (cookie HttpOnly), usar Server Action
+      // 1. Cargar siempre movimientos de Firebase Plataforma (real)
+      try {
+        const movimientos = usuario ? await obtenerMovimientosPlataforma(usuario.uid) : [];
+        const historialTransformado = movimientos.map((mv) => ({
+          id: mv.id,
+          tipo: mv.tipo,
+          monto: mv.monto,
+          fecha: formatearFecha(new Date(mv.fecha)),
+          estado: mv.estado,
+          detalle: mv.detalle,
+        }));
+        setMovimientosPlataforma(historialTransformado);
+      } catch (error) {
+        console.error('Error al obtener movimientos de la plataforma:', error);
+      }
+
+      // 2. Si está conectado a Odoo, cargar también movimientos de Odoo
       if (isAuthenticated) {
-        setUsandoAPI(true);
         try {
-          // Import dynamic to avoid server-action issues in client component if checking auth first
           const { getWalletDataAction } = await import('@/app/actions/wallet');
           const response = await getWalletDataAction();
 
           if (response.success && response.data && response.data.transactions) {
-            // Transformar datos de API a formato de la UI
             const historialTransformado = response.data.transactions.map((tx: any, index: number) => ({
-              id: index + 1,
+              id: `odoo_${index + 1}`,
               tipo: tx.transaction_type || 'transaccion',
               monto: tx.amount || 0,
               fecha: tx.date ? formatearFecha(new Date(tx.date)) : (tx.createdAt ? formatearFecha(new Date(tx.createdAt)) : 'Fecha desconocida'),
               estado: tx.state === 'done' ? 'completado' : tx.state,
               detalle: tx.description || 'Transacción',
             }));
-            setTransacciones(historialTransformado);
-          } else {
-            setTransacciones([]);
+            setMovimientosOdoo(historialTransformado);
           }
         } catch (error) {
-          console.error('Error al obtener historial:', error);
-          setTransacciones([]);
+          console.error('Error al obtener historial de Odoo:', error);
         }
-      } else {
-        // Sin autenticación bancaria, usar mock data de Firebase o vacío
-        setUsandoAPI(false);
-        setTransacciones(mockTransacciones);
       }
 
       setLoadingData(false);
@@ -120,6 +134,9 @@ export default function HistorialBilleteraPage() {
       fetchHistorial();
     }
   }, [usuario, isAuthenticated]);
+
+  // Computar movimientos activos según la pestaña seleccionada
+  const transacciones = filtroActivo === 'plataforma' ? movimientosPlataforma : movimientosOdoo;
 
   if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center"><div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div></div>;
   if (!usuario) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white">Acceso Restringido</div>;
@@ -137,22 +154,22 @@ export default function HistorialBilleteraPage() {
             <FaArrowLeft className="group-hover:-translate-x-1 transition-transform" /> Volver a Billetera
           </Link>
 
-          {/* Indicador de fuente de datos */}
-          {usandoAPI ? (
-            <div className="text-xs text-green-400 bg-green-500/10 px-3 py-1 rounded-full border border-green-500/20 flex items-center gap-2">
-              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-              API Billetera
+          {/* Indicador de fuente de datos dinámico */}
+          {filtroActivo === 'odoo' ? (
+            <div className="text-xs text-purple-400 bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20 flex items-center gap-2">
+              <span className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span>
+              API Billetera Odoo
             </div>
           ) : (
             <div className="text-xs text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 flex items-center gap-2">
-              <span className="w-2 h-2 bg-blue-400 rounded-full"></span>
-              Modo Demo
+              <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></span>
+              Movimientos Plataforma
             </div>
           )}
         </div>
 
         <div className="bg-slate-900/40 backdrop-blur-xl border border-white/10 rounded-[28px] p-8 shadow-2xl relative overflow-hidden">
-          <div className="flex items-center gap-4 mb-8 pb-6 border-b border-white/5">
+          <div className="flex items-center gap-4 mb-6 pb-6 border-b border-white/5">
             <div className="w-14 h-14 bg-indigo-500/10 rounded-2xl flex items-center justify-center border border-indigo-500/20 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
               <FaHistory className="text-2xl text-indigo-400" />
             </div>
@@ -160,6 +177,39 @@ export default function HistorialBilleteraPage() {
               <h1 className="text-3xl font-bold text-white font-roboto-slab">Historial de Transacciones</h1>
               <p className="text-gray-400">Registro detallado de tus movimientos</p>
             </div>
+          </div>
+
+          {/* Tabs Interactivos */}
+          <div className="flex border-b border-white/5 mb-6">
+            <button
+              onClick={() => setFiltroActivo('plataforma')}
+              className={`flex-1 pb-4 text-center font-bold text-sm transition-all border-b-2 focus:outline-none ${
+                filtroActivo === 'plataforma'
+                  ? 'border-blue-500 text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-400'
+              }`}
+            >
+              Movimientos de Plataforma
+            </button>
+            <button
+              onClick={() => {
+                if (isAuthenticated) {
+                  setFiltroActivo('odoo');
+                } else {
+                  alert('Para ver los movimientos de Odoo, debes conectar tu billetera externa en el panel de inicio.');
+                }
+              }}
+              className={`flex-1 pb-4 text-center font-bold text-sm transition-all border-b-2 flex items-center justify-center gap-2 focus:outline-none ${
+                filtroActivo === 'odoo'
+                  ? 'border-purple-500 text-purple-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-400'
+              } ${!isAuthenticated ? 'cursor-not-allowed opacity-60' : ''}`}
+            >
+              Billetera Odoo Externa
+              {!isAuthenticated && (
+                <span className="text-[9px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded-full uppercase">Desconectada</span>
+              )}
+            </button>
           </div>
 
           {loadingData ? (

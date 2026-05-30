@@ -43,6 +43,7 @@ export default function NuevoProductoPage() {
   const [uploading, setUploading] = useState(false);
   const [urlimagen, setURLImage] = useState<string[]>([]);
   const [error, setError] = useState<string | false>(false);
+  const [comisionGestor, setComisionGestor] = useState(10); // 5%–20%, default 10%
   const [coordenadas, setCoordenadas] = useState<{ lat: number; lng: number }>({
     lat: -12.0464,
     lng: -77.0428
@@ -86,6 +87,10 @@ export default function NuevoProductoPage() {
         monto: 0,
         depositoRecaudado: false,
         fechaLimite: new Date(valores.fechaLimite).getTime(),
+        // ⭐ CAMPOS ENTERPRISE
+        gestorId: usuario.uid,
+        comisionGestor: comisionGestor,
+        distribucionEjecutada: false,
       };
 
       const toastId = showToast.loading('Creando producto...');
@@ -330,6 +335,57 @@ export default function NuevoProductoPage() {
                 />
                 {errores.fechaLimite && <p className="text-red-400 text-sm mt-1">{errores.fechaLimite}</p>}
                 <p className="text-xs text-gray-500 mt-1">Si no se alcanza el 100% para esta fecha, se bloquearán las inversiones.</p>
+              </div>
+
+              {/* ⭐ COMISIÓN DEL GESTOR */}
+              <div className="bg-slate-950/50 border border-amber-500/20 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <label className="text-amber-300 font-bold text-base block mb-1">
+                      💼 Comisión del Gestor
+                    </label>
+                    <p className="text-gray-500 text-xs">Porcentaje sobre la utilidad neta que percibirás al liquidar el proyecto</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-3xl font-black text-amber-400 font-mono">{comisionGestor}%</span>
+                    <p className="text-xs text-gray-500 mt-1">rango: 5% – 20%</p>
+                  </div>
+                </div>
+
+                {/* Slider */}
+                <input
+                  type="range"
+                  min={5}
+                  max={20}
+                  step={1}
+                  value={comisionGestor}
+                  onChange={(e) => setComisionGestor(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-700 rounded-full appearance-none cursor-pointer accent-amber-400 mb-5"
+                />
+                <div className="flex justify-between text-xs text-gray-600 -mt-4 mb-5">
+                  <span>5% (mínimo)</span>
+                  <span>10% (estándar)</span>
+                  <span>20% (máximo)</span>
+                </div>
+
+                {/* Preview de distribución en tiempo real */}
+                <div className="bg-slate-900/80 rounded-xl p-4 border border-white/5">
+                  <p className="text-xs text-gray-400 mb-3 font-semibold uppercase tracking-wider">Vista previa — Ejemplo con utilidad neta de S/ 100,000</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-400 text-sm">Utilidad Neta del Proyecto</span>
+                      <span className="font-mono text-white font-bold">S/ 100,000</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-amber-400 text-sm">Tu Fee de Gestor ({comisionGestor}%)</span>
+                      <span className="font-mono text-amber-400 font-bold">S/ {(100000 * comisionGestor / 100).toLocaleString('es-PE')}</span>
+                    </div>
+                    <div className="border-t border-white/10 pt-2 flex justify-between items-center">
+                      <span className="text-emerald-400 text-sm font-bold">Pool para Socios ({100 - comisionGestor}%)</span>
+                      <span className="font-mono text-emerald-400 font-bold text-lg">S/ {(100000 * (100 - comisionGestor) / 100).toLocaleString('es-PE')}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* URL */}

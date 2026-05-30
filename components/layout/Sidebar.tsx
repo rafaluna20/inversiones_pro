@@ -7,7 +7,7 @@ import {
     FaHome, FaFire, FaSearch, FaUsers, FaWallet, FaUser, FaPlus,
     FaChartLine, FaFileInvoice, FaMap, FaCog, FaQuestionCircle,
     FaChevronLeft, FaChevronRight, FaStar, FaBell, FaShieldAlt,
-    FaUserFriends, FaTrophy
+    FaUserFriends, FaTrophy, FaBriefcase
 } from 'react-icons/fa';
 import useAutenticacion from '@/Hooks/useAutenticacion';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -86,6 +86,7 @@ export default function Sidebar() {
             items: [
                 { name: 'Dashboard', href: '/', icon: FaHome },
                 { name: 'Mis Inversiones', href: '/mis-inversiones', icon: FaChartLine, badge: activeInvestments, badgeColor: 'green' },
+                { name: 'Panel del Gestor', href: '/gestor', icon: FaBriefcase, badge: 'GESTOR', badgeColor: 'yellow' },
                 { name: 'Oportunidades', href: '/populares', icon: FaStar, badge: 'HOT', badgeColor: 'red' }
             ]
         },

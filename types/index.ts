@@ -79,17 +79,28 @@ export interface Producto {
   monto: number;
   depositoRecaudado: boolean;
   direccion?: string;
-  
+
+  // ⭐ CAMPOS ENTERPRISE: GESTOR Y COMISIÓN
+  /** ID del usuario gestor del proyecto (rol 'gestor' asignado por admin) */
+  gestorId?: string;
+  /** Porcentaje de comisión del gestor sobre la utilidad neta. Rango: 5–20. Default: 10 */
+  comisionGestor?: number;
+  /** Utilidad neta del proyecto al momento de la liquidación */
+  utilidadNeta?: number;
+  /** Si el proyecto ya fue liquidado y la distribución fue ejecutada */
+  distribucionEjecutada?: boolean;
+  fechaDistribucion?: number;
+
   // ⭐ CAMPOS NUEVOS PARA MODELO BIFÁSICO
   modeloBifasico?: boolean;  // true = proyecto bifásico, false/undefined = cubos simples
   etapaActual?: 'tierra' | 'construccion' | 'finalizado';
   estadoProyecto?: 'captacion' | 'en_progreso' | 'completado' | 'cancelado';
-  
+
   etapas?: {
     tierra: EtapaProyecto;
     construccion: EtapaProyecto;
   };
-  
+
   aporteSuelo?: {
     valorTierra: number;
     valorConstruccion: number;
@@ -97,7 +108,7 @@ export interface Producto {
     porcentajeTierra: number;
     porcentajeCapital: number;
   };
-  
+
   progresoConstruccion?: number;  // 0-100
   fechaInicioTierra?: number;
   fechaInicioConstruccion?: number;
@@ -352,4 +363,48 @@ export interface Documento {
 // Tipo de errores de validación
 export interface ValidationErrors {
   [key: string]: string;
+}
+
+// ============================================
+// DISTRIBUCIÓN DE UTILIDADES (MOTOR 10/90)
+// ============================================
+
+/** Detalle de la ganancia de un socio individual en una distribución */
+export interface DistribucionSocio {
+  usuarioId: string;
+  proyectoId: string;
+  montoInvertido: number;
+  /** Porcentaje de participación sobre el capital total del proyecto */
+  participacionPorcentaje: number;
+  /** Ganancia neta recibida = poolSocios × (participacionPorcentaje / 100) */
+  gananciaDistribuida: number;
+}
+
+/**
+ * Registro inmutable de una liquidación de proyecto.
+ * Se guarda en Firestore bajo la colección 'distribuciones'.
+ */
+export interface Distribucion {
+  id: string;
+  proyectoId: string;
+  proyectoNombre: string;
+  gestorId: string;
+  /** Porcentaje de comisión aplicado (según configuración del proyecto) */
+  comisionGestorPorcentaje: number;
+  fechaEjecucion: number;
+  /** Utilidad neta total del proyecto al momento de la liquidación */
+  utilidadNeta: number;
+  /** Monto cobrado por el gestor = utilidadNeta × comisionGestorPorcentaje / 100 */
+  feeGestor: number;
+  /** Monto distribuible entre socios = utilidadNeta − feeGestor */
+  poolSocios: number;
+  /** Capital total aportado por todos los socios confirmados */
+  capitalTotalSocios: number;
+  /** Array con la ganancia de cada socio */
+  distribucionPorSocio: DistribucionSocio[];
+  /** Hash SHA-256 para auditoría e inmutabilidad del documento */
+  hashSHA256: string;
+  /** UID del usuario que ejecutó la distribución */
+  ejecutadoPor: string;
+  createdAt: number;
 }
