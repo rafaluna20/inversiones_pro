@@ -61,8 +61,12 @@ export default function InvestmentModal({
             return;
         }
 
-        if (formData.cubos > cubosDisponibles) {
-            showToast.error(`Solo hay ${cubosDisponibles} cubos disponibles`);
+        // Redondear ambos valores antes de comparar para evitar errores de precisión
+        const cubosRedondeados = Math.round(formData.cubos * 10000) / 10000;
+        const disponiblesRedondeados = Math.round(cubosDisponibles * 10000) / 10000;
+
+        if (cubosRedondeados > disponiblesRedondeados) {
+            showToast.error(`Solo hay ${disponiblesRedondeados.toFixed(4)} cubos disponibles`);
             return;
         }
 
@@ -177,7 +181,6 @@ export default function InvestmentModal({
                                 }}
                                 className="input"
                                 min={0.0001}
-                                max={cubosDisponibles}
                                 required
                             />
                             <p className="text-xs text-gray-500 mt-1">
