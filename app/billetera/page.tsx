@@ -453,7 +453,7 @@ export default function BilleteraPage() {
                       { 
                         icon: FaArrowUp, 
                         label: "Enviar a Billetera", 
-                        href: "/billetera/retirar-banco", 
+                        href: "/billetera/retirar", 
                         color: "text-orange-400", 
                         bg: "hover:bg-orange-500/10 hover:border-orange-500/20"
                       },
