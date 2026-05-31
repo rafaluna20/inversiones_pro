@@ -137,16 +137,8 @@ export async function withdrawMoneyAction(amount: number, method: string = 'bank
 /**
  * loadPlatformBalanceAction
  * ─────────────────────────────────────────────────────────────────────────────
- * Orquesta el "Bridge Transaction": debita de la Billetera Odoo y acredita en
- * el saldo de Firebase (plataforma de inversiones) con garantía de idempotencia.
- *
- * Flujo interno:
- * 1. Llama a POST /api/wallet/platform-load en Odoo → obtiene transaction_id
- * 2. Llama a acreditarDesdeBilletera() en Firebase con ese transaction_id
- * 3. Si Firebase falla, retorna el transaction_id para reintentar más tarde
- *
- * @param amount - Monto a cargar (en soles)
- * @param firebaseUid - UID del usuario en Firebase
+ * Paso 1 del puente: Debita de la Billetera Odoo.
+ * (El paso 2 de acreditar en Firebase DEBE hacerse en el cliente para tener Auth).
  */
 export async function loadPlatformBalanceAction(amount: number, firebaseUid: string) {
     if (amount < 10) {
@@ -157,10 +149,8 @@ export async function loadPlatformBalanceAction(amount: number, firebaseUid: str
         return { success: false, message: 'No se pudo identificar tu cuenta de plataforma' };
     }
 
-    // Generar clave de idempotencia única para este intento
     const idempotencyKey = `PLAT-${firebaseUid}-${Date.now()}`;
 
-    // ── PASO 1: Debitar de Odoo ────────────────────────────────────────────
     const odooResponse = await odooCall('/api/wallet/platform-load', {
         amount,
         firebase_uid: firebaseUid,
@@ -168,7 +158,6 @@ export async function loadPlatformBalanceAction(amount: number, firebaseUid: str
         idempotency_key: idempotencyKey,
     });
 
-    // Verificar respuesta de Odoo
     if (odooResponse.error) {
         return {
             success: false,
@@ -185,76 +174,12 @@ export async function loadPlatformBalanceAction(amount: number, firebaseUid: str
         };
     }
 
-    const transactionId: string = odooResult.transaction_id;
-    const amountDebited: number = odooResult.amount;
-
-    // ── PASO 2: Acreditar en Firebase (con idempotencia) ───────────────────
-    // Importación dinámica para no romper el bundle de server actions con código de cliente
-    const { default: acreditarDesdeBilletera } = await import('@/Validacion/acreditarDesdeBilletera');
-
-    const firebaseResult = await acreditarDesdeBilletera(
-        firebaseUid,
-        amountDebited,
-        transactionId
-    );
-
-    if (!firebaseResult.success) {
-        // Odoo YA debitó pero Firebase falló.
-        // Retornamos el transactionId para que el usuario pueda reintentar el crédito.
-        console.error(
-            `[Bridge] ALERTA: Odoo debitó S/${amountDebited} (TxID: ${transactionId}) pero Firebase falló:`,
-            firebaseResult.error
-        );
-        return {
-            success: false,
-            partial: true,  // Flag: Odoo OK pero Firebase falló
-            transaction_id: transactionId,
-            message: `El débito en la billetera fue exitoso pero hubo un error al acreditar en la plataforma. Código de recuperación: ${transactionId}`,
-        };
-    }
-
+    // Retornamos éxito de Odoo y el transactionId para que el cliente acredite en Firebase
     return {
         success: true,
-        already_applied: firebaseResult.already_applied,
-        transaction_id: transactionId,
-        amount: amountDebited,
-        new_platform_balance: firebaseResult.newBalance,
-        message: firebaseResult.already_applied
-            ? 'Esta carga ya fue aplicada anteriormente'
-            : `¡S/ ${amountDebited.toFixed(2)} cargados a tu plataforma exitosamente!`,
-    };
-}
-
-/**
- * retryFirebaseCreditAction
- * ─────────────────────────────────────────────────────────────────────────────
- * Reintenta acreditar en Firebase si el paso anterior falló pero Odoo ya debitó.
- * El usuario debe proporcionar el transaction_id recibido en el error anterior.
- */
-export async function retryFirebaseCreditAction(
-    transactionId: string,
-    firebaseUid: string,
-    amount: number
-) {
-    if (!transactionId || !firebaseUid || amount <= 0) {
-        return { success: false, message: 'Datos de recuperación inválidos' };
-    }
-
-    const { default: acreditarDesdeBilletera } = await import('@/Validacion/acreditarDesdeBilletera');
-
-    const result = await acreditarDesdeBilletera(firebaseUid, amount, transactionId);
-
-    if (!result.success) {
-        return { success: false, message: result.error || 'Error al recuperar el crédito' };
-    }
-
-    return {
-        success: true,
-        already_applied: result.already_applied,
-        new_platform_balance: result.newBalance,
-        message: result.already_applied
-            ? 'Esta transacción ya estaba aplicada'
-            : `¡Crédito recuperado! S/ ${amount.toFixed(2)} añadidos a tu saldo de plataforma`,
+        transaction_id: odooResult.transaction_id,
+        amount: odooResult.amount,
+        message: 'Débito exitoso en Odoo',
     };
 }
 

@@ -81,31 +81,44 @@ export default function RecargarBilleteraPage() {
 
     try {
       const { loadPlatformBalanceAction } = await import('@/app/actions/wallet');
-      const result = await loadPlatformBalanceAction(montoNum, usuario.uid);
+      const odooResult = await loadPlatformBalanceAction(montoNum, usuario.uid);
+
+      if (!odooResult.success) {
+        showToast.dismiss(String(toastId));
+        setError(odooResult.message || 'Error al cargar saldo');
+        showToast.error(odooResult.message || 'Error al cargar saldo');
+        setProcessing(false);
+        return;
+      }
+
+      // Odoo debitó exitosamente. Ahora acreditamos en Firebase desde el CLIENTE
+      const transactionId = (odooResult as any).transaction_id;
+      const amountDebited = (odooResult as any).amount;
+
+      const { default: acreditarDesdeBilletera } = await import('@/Validacion/acreditarDesdeBilletera');
+      const firebaseResult = await acreditarDesdeBilletera(usuario.uid, amountDebited, transactionId);
 
       showToast.dismiss(String(toastId));
 
-      if (result.success) {
-        setSuccess(result.message || `¡S/ ${montoNum.toFixed(2)} cargados exitosamente!`);
+      if (firebaseResult.success) {
+        setSuccess(firebaseResult.already_applied
+          ? 'Esta carga ya fue aplicada anteriormente'
+          : `¡S/ ${amountDebited.toFixed(2)} cargados exitosamente!`);
         setMonto('');
-        setSaldoOdoo(prev => prev !== null ? prev - montoNum : null);
-        showToast.success(result.message || '¡Saldo cargado!');
+        setSaldoOdoo(prev => prev !== null ? prev - amountDebited : null);
+        showToast.success('¡Saldo cargado!');
         setTimeout(() => router.push('/'), 2000);
-
-      } else if ((result as any).partial) {
-        // Odoo debitó pero Firebase falló → guardar para reintento
-        setPendingRecovery({
-          transactionId: (result as any).transaction_id,
-          amount: montoNum,
-        });
-        setError(result.message || 'Error parcial');
-        showToast.error('Error al acreditar. Guarda tu código de recuperación.');
-
       } else {
-        setError(result.message || 'Error al cargar saldo');
-        showToast.error(result.message || 'Error al cargar saldo');
+        // Firebase falló, Odoo debitó
+        setPendingRecovery({
+          transactionId: transactionId,
+          amount: amountDebited,
+        });
+        setError(firebaseResult.error || 'Error al acreditar en la plataforma');
+        showToast.error('Error al acreditar. Guarda tu código de recuperación.');
         setProcessing(false);
       }
+
     } catch (err: any) {
       showToast.dismiss(String(toastId));
       setError(err.message || 'Error inesperado');
@@ -120,22 +133,25 @@ export default function RecargarBilleteraPage() {
     const toastId = showToast.loading('Recuperando crédito...');
 
     try {
-      const { retryFirebaseCreditAction } = await import('@/app/actions/wallet');
-      const result = await retryFirebaseCreditAction(
-        pendingRecovery.transactionId,
+      const { default: acreditarDesdeBilletera } = await import('@/Validacion/acreditarDesdeBilletera');
+      const firebaseResult = await acreditarDesdeBilletera(
         usuario.uid,
-        pendingRecovery.amount
+        pendingRecovery.amount,
+        pendingRecovery.transactionId
       );
+      
       showToast.dismiss(String(toastId));
 
-      if (result.success) {
+      if (firebaseResult.success) {
         setPendingRecovery(null);
         setError('');
-        setSuccess(result.message || '¡Crédito recuperado!');
-        showToast.success(result.message || '¡Crédito recuperado!');
+        setSuccess(firebaseResult.already_applied
+          ? 'Esta transacción ya estaba aplicada'
+          : '¡Crédito recuperado!');
+        showToast.success('¡Crédito recuperado!');
         setTimeout(() => router.push('/'), 2000);
       } else {
-        showToast.error(result.message || 'Error al recuperar');
+        showToast.error(firebaseResult.error || 'Error al recuperar');
         setProcessing(false);
       }
     } catch (err: any) {
