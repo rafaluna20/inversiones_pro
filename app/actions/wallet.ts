@@ -3,8 +3,8 @@
 import { cookies } from 'next/headers';
 import { TransferSchema } from '@/lib/schemas';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_WALLET_API_URL || 'http://localhost:8069';
-const ODOO_DB = process.env.NEXT_PUBLIC_ODOO_DB || 'odoo_akallpav1';
+const API_BASE_URL = process.env.NEXT_PUBLIC_WALLET_API_URL || '';
+const ODOO_DB = process.env.NEXT_PUBLIC_ODOO_DB || 'odoo_akallpav2';
 const COOKIE_NAME = 'billetera_session';
 
 async function getOdooToken() {
@@ -15,7 +15,12 @@ async function odooCall(endpoint: string, params: any = {}) {
     const token = await getOdooToken();
 
     if (!token) {
-        return { error: { message: 'No autenticado' } };
+        return { error: { message: 'No autenticado en la billetera' } };
+    }
+
+    if (!API_BASE_URL) {
+        console.error('[Odoo] NEXT_PUBLIC_WALLET_API_URL no está configurada en las variables de entorno.');
+        return { error: { message: 'Servicio de billetera no configurado. Contacta al administrador.' } };
     }
 
     // Timeout de 15 segundos para evitar que la UI quede colgada
