@@ -77,7 +77,6 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
     fecha: new Date().toISOString().split('T')[0],
     descripcion: '',
     proveedor: '',
-    comprobante: '',
     estado: 'aprobado' as 'pendiente' | 'aprobado' | 'rechazado'
   });
 
@@ -104,12 +103,6 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
       return;
     }
 
-    // Validar comprobante para montos >S/500
-    if (monto > 500 && !formData.comprobante) {
-      alert('⚠️ Gastos mayores a S/ 500 requieren comprobante');
-      return;
-    }
-
     try {
       setSubmitting(true);
       
@@ -120,7 +113,6 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
         fecha: new Date(formData.fecha).getTime(),
         descripcion: formData.descripcion || undefined,
         proveedor: formData.proveedor || undefined,
-        comprobante: formData.comprobante || undefined,
         registradoPor: usuarioId || '',
         estado: formData.estado
       };
@@ -139,7 +131,6 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
         fecha: new Date().toISOString().split('T')[0],
         descripcion: '',
         proveedor: '',
-        comprobante: '',
         estado: 'aprobado'
       });
       setMostrarModal(false);
@@ -161,7 +152,6 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
         fecha: new Date(gasto.fecha).toISOString().split('T')[0],
         descripcion: gasto.descripcion || '',
         proveedor: gasto.proveedor || '',
-        comprobante: gasto.comprobante || '',
         estado: gasto.estado || 'aprobado'
       });
       setGastoEditando(gastoId);
@@ -576,36 +566,20 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
                 />
               </div>
 
-              {/* Comprobante y Estado */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    URL del Comprobante {parseFloat(formData.monto) > 500 && '*'}
-                  </label>
-                  <input
-                    type="url"
-                    value={formData.comprobante}
-                    onChange={(e) => setFormData({ ...formData, comprobante: e.target.value })}
-                    className="w-full bg-slate-800 border border-white/10 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="https://..."
-                    required={parseFloat(formData.monto) > 500}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Estado
-                  </label>
-                  <select
-                    value={formData.estado}
-                    onChange={(e) => setFormData({ ...formData, estado: e.target.value as any })}
-                    className="w-full bg-slate-800 border border-white/10 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="aprobado">✅ Aprobado</option>
-                    <option value="pendiente">⏳ Pendiente</option>
-                    <option value="rechazado">❌ Rechazado</option>
-                  </select>
-                </div>
+              {/* Estado */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Estado
+                </label>
+                <select
+                  value={formData.estado}
+                  onChange={(e) => setFormData({ ...formData, estado: e.target.value as any })}
+                  className="w-full bg-slate-800 border border-white/10 text-white rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  <option value="aprobado">✅ Aprobado</option>
+                  <option value="pendiente">⏳ Pendiente</option>
+                  <option value="rechazado">❌ Rechazado</option>
+                </select>
               </div>
 
               {/* Botones */}
