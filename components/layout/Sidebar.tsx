@@ -281,6 +281,7 @@ export default function Sidebar() {
                                     <div key={item.name}>
                                         <Link
                                             href={item.href}
+                                            prefetch={false}
                                             onClick={() => headerAnalytics.sidebarNavClick(item.name, usuario?.uid)}
                                             className={`
                                                 flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative
@@ -333,6 +334,7 @@ export default function Sidebar() {
                         {/* Help Link */}
                         <Link
                             href="/soporte"
+                            prefetch={false}
                             className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-lg transition-colors"
                         >
                             <FaQuestionCircle className="w-4 h-4" />
