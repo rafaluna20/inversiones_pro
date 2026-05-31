@@ -13,6 +13,7 @@ import { fileValidators, sanitizeHTML } from '@/lib/validators';
 import OptimizedImage from '@/components/common/OptimizedImage';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
+import imageCompression from 'browser-image-compression';
 
 const LocationPicker = dynamic(() => import('@/components/common/LocationPicker'), {
   ssr: false,
@@ -43,7 +44,8 @@ export default function NuevoProductoPage() {
   const [uploading, setUploading] = useState(false);
   const [urlimagen, setURLImage] = useState<string[]>([]);
   const [error, setError] = useState<string | false>(false);
-  const [comisionGestor, setComisionGestor] = useState(20); // 5%–20%, default 20%
+  const [comisionGestor, setComisionGestor] = useState(0); // 0%–20%, default 0%
+  const [submitting, setSubmitting] = useState(false);
   const [coordenadas, setCoordenadas] = useState<{ lat: number; lng: number }>({
     lat: -12.0464,
     lng: -77.0428
@@ -61,7 +63,13 @@ export default function NuevoProductoPage() {
       return;
     }
 
+    // Prevenir doble submit
+    if (submitting) {
+      return;
+    }
+
     try {
+      setSubmitting(true);
       // Sanitizar descripción
       const descripcionSanitizada = sanitizeHTML(valores.descripcion);
 
@@ -104,10 +112,12 @@ export default function NuevoProductoPage() {
       const errorMsg = error.message || 'Error al crear el producto';
       setError(errorMsg);
       showToast.error(errorMsg);
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
@@ -131,33 +141,54 @@ export default function NuevoProductoPage() {
     setUploading(true);
     setError(false);
 
-    const toastId = showToast.loading('Subiendo imágenes...');
+    const toastId = showToast.loading('Comprimiendo y subiendo imágenes...');
+
+    // Configuración de compresión inteligente
+    const compressionOptions = {
+      maxSizeMB: 0.3,          // 300KB máximo
+      maxWidthOrHeight: 1920,  // 1920px máximo
+      useWebWorker: true,      // No bloquear UI
+      fileType: 'image/webp',  // Mejor formato
+      initialQuality: 0.85     // 85% calidad
+    };
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      const imageRef = ref(storage, 'productos/' + Date.now() + '_' + file.name);
-      const uploadTask = uploadBytesResumable(imageRef, file);
+      
+      try {
+        // Comprimir imagen
+        console.log(`Comprimiendo ${file.name} (${(file.size / 1024).toFixed(0)}KB)...`);
+        const compressedFile = await imageCompression(file, compressionOptions);
+        console.log(`✅ Comprimido a ${(compressedFile.size / 1024).toFixed(0)}KB`);
 
-      const uploadPromise = new Promise<string>((resolve, reject) => {
-        uploadTask.on(
-          'state_changed',
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log(`Subiendo ${file.name}: ${progress.toFixed(0)}%`);
-          },
-          (error) => {
-            console.error('Error al subir imagen:', error);
-            reject(error);
-          },
-          () => {
-            getDownloadURL(uploadTask.snapshot.ref).then((url) => {
-              resolve(url);
-            });
-          }
-        );
-      });
+        // Subir imagen comprimida
+        const imageRef = ref(storage, 'productos/' + Date.now() + '_' + file.name.replace(/\.[^/.]+$/, '.webp'));
+        const uploadTask = uploadBytesResumable(imageRef, compressedFile);
 
-      uploadPromises.push(uploadPromise);
+        const uploadPromise = new Promise<string>((resolve, reject) => {
+          uploadTask.on(
+            'state_changed',
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              console.log(`Subiendo ${file.name}: ${progress.toFixed(0)}%`);
+            },
+            (error) => {
+              console.error('Error al subir imagen:', error);
+              reject(error);
+            },
+            () => {
+              getDownloadURL(uploadTask.snapshot.ref).then((url) => {
+                resolve(url);
+              });
+            }
+          );
+        });
+
+        uploadPromises.push(uploadPromise);
+      } catch (error) {
+        console.error(`Error al comprimir ${file.name}:`, error);
+        showToast.error(`Error al comprimir ${file.name}`);
+      }
     }
 
     Promise.all(uploadPromises)
@@ -165,7 +196,7 @@ export default function NuevoProductoPage() {
         setUploading(false);
         setURLImage(urls);
         showToast.dismiss(toastId);
-        showToast.success(`${urls.length} imagen(es) subida(s) correctamente`);
+        showToast.success(`${urls.length} imagen(es) optimizada(s) y subida(s) correctamente`);
       })
       .catch((error) => {
         setUploading(false);
@@ -348,14 +379,14 @@ export default function NuevoProductoPage() {
                   </div>
                   <div className="text-right">
                     <span className="text-3xl font-black text-amber-400 font-mono">{comisionGestor}%</span>
-                    <p className="text-xs text-gray-500 mt-1">rango: 5% – 20%</p>
+                    <p className="text-xs text-gray-500 mt-1">rango: 0% – 20%</p>
                   </div>
                 </div>
 
                 {/* Slider */}
                 <input
                   type="range"
-                  min={5}
+                  min={0}
                   max={20}
                   step={1}
                   value={comisionGestor}
@@ -363,7 +394,7 @@ export default function NuevoProductoPage() {
                   className="w-full h-2 bg-slate-700 rounded-full appearance-none cursor-pointer accent-amber-400 mb-5"
                 />
                 <div className="flex justify-between text-xs text-gray-600 -mt-4 mb-5">
-                  <span>5% (mínimo)</span>
+                  <span>0% (mínimo)</span>
                   <span>10% (estándar)</span>
                   <span>20% (máximo)</span>
                 </div>
@@ -540,10 +571,10 @@ export default function NuevoProductoPage() {
           <div className="flex flex-col md:flex-row gap-4 pt-4">
             <button
               type="submit"
-              disabled={uploading}
+              disabled={uploading || submitting}
               className="flex-1 py-4 text-lg font-bold text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-xl shadow-lg shadow-blue-900/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {uploading ? 'Procesando...' : 'Publicar Proyecto'}
+              {submitting ? 'Publicando...' : uploading ? 'Procesando...' : 'Publicar Proyecto'}
             </button>
             <Link
               href="/"

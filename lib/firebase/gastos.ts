@@ -45,9 +45,9 @@ export async function agregarGasto(
       categoria: validado.categoria,
       monto: validado.monto,
       fecha: validado.fecha,
-      comprobante: validado.comprobante,
-      descripcion: validado.descripcion,
-      proveedor: validado.proveedor,
+      ...(validado.comprobante && { comprobante: validado.comprobante }),
+      ...(validado.descripcion && { descripcion: validado.descripcion }),
+      ...(validado.proveedor && { proveedor: validado.proveedor }),
       registradoPor: validado.registradoPor,
       proyectoId: validado.proyectoId,
       estado: gasto.estado || 'aprobado', // Por defecto aprobado
