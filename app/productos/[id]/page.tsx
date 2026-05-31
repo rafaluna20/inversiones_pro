@@ -287,9 +287,12 @@ export default function ProductoDetallesPage() {
       return;
     }
 
-    // Si la cantidad pedida supera los cubos libres, ajustar
-    if (data.cubos > cubosLibres) {
-      showToast.error(`Solo quedan ${cubosLibres} cubos disponibles. Ajusta tu inversión.`);
+    // Si la cantidad pedida supera los cubos libres, ajustar (con tolerancia para errores de redondeo)
+    const cubosRedondeados = Math.round(data.cubos * 10000) / 10000;
+    const cubosLibresRedondeados = Math.round(cubosLibres * 10000) / 10000;
+    
+    if (cubosRedondeados > cubosLibresRedondeados + 0.0001) {
+      showToast.error(`Solo quedan ${cubosLibresRedondeados.toFixed(4)} cubos disponibles. Ajusta tu inversión.`);
       return;
     }
 

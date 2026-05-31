@@ -85,6 +85,8 @@ export default function TrackRecordGestorPDF({ proyectos, distribuciones, gestor
           fechaLiq = format(dateObj, 'MMM yyyy', { locale: es });
         }
 
+        const comisionGestorMonto = gananciaNeta * (comision / 100);
+        
         return `
       <tr>
         <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:left;">
@@ -94,8 +96,16 @@ export default function TrackRecordGestorPDF({ proyectos, distribuciones, gestor
         <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;color:#334155;">
           ${formatearSoles(capital)}
         </td>
-        <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;color:#059669;font-weight:700;">
-          +${formatearSoles(gananciaSocios)}
+        <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;">
+          <div style="font-family:monospace;color:#059669;font-weight:700;font-size:12px;">
+            +${formatearSoles(gananciaSocios)}
+          </div>
+          ${comision > 0 ? `
+          <div style="font-size:9px;color:#64748b;margin-top:2px;">
+            Ganancia total: ${formatearSoles(gananciaNeta)}<br/>
+            Comisión gestor (${comision}%): -${formatearSoles(comisionGestorMonto)}
+          </div>
+          ` : ''}
         </td>
         <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:center;font-family:monospace;color:#8b5cf6;font-weight:700;">
           ${roiProyecto.toFixed(2)}%

@@ -43,7 +43,7 @@ export default function NuevoProductoPage() {
   const [uploading, setUploading] = useState(false);
   const [urlimagen, setURLImage] = useState<string[]>([]);
   const [error, setError] = useState<string | false>(false);
-  const [comisionGestor, setComisionGestor] = useState(10); // 5%–20%, default 10%
+  const [comisionGestor, setComisionGestor] = useState(20); // 5%–20%, default 20%
   const [coordenadas, setCoordenadas] = useState<{ lat: number; lng: number }>({
     lat: -12.0464,
     lng: -77.0428
@@ -331,10 +331,10 @@ export default function NuevoProductoPage() {
                   value={valores.fechaLimite}
                   onChange={handleChange}
                   onBlur={handleBlur}
-                  className={`w-full bg-slate-950/50 border ${errores.fechaLimite ? 'border-red-500/50' : 'border-white/10'} rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors`}
+                  className={`w-full bg-slate-950/50 border ${errores.fechaLimite ? 'border-red-500/50' : 'border-white/10'} rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors [color-scheme:dark]`}
                 />
                 {errores.fechaLimite && <p className="text-red-400 text-sm mt-1">{errores.fechaLimite}</p>}
-                <p className="text-xs text-gray-500 mt-1">Si no se alcanza el 100% para esta fecha, se bloquearán las inversiones.</p>
+                <p className="text-xs text-gray-500 mt-1">Si no se alcanza el 100% para esta fecha, se bloquearán las inversiones. Formato: dd/mm/aaaa</p>
               </div>
 
               {/* ⭐ COMISIÓN DEL GESTOR */}

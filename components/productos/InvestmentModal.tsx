@@ -65,8 +65,9 @@ export default function InvestmentModal({
         const cubosRedondeados = Math.round(formData.cubos * 10000) / 10000;
         const disponiblesRedondeados = Math.round(cubosDisponibles * 10000) / 10000;
 
-        if (cubosRedondeados > disponiblesRedondeados) {
-            showToast.error(`Solo hay ${disponiblesRedondeados.toFixed(4)} cubos disponibles`);
+        // Permitir una tolerancia de 0.0001 para errores de redondeo
+        if (cubosRedondeados > disponiblesRedondeados + 0.0001) {
+            showToast.error(`Solo hay ${disponiblesRedondeados.toFixed(4)} cubos disponibles. Intentas invertir ${cubosRedondeados.toFixed(4)} cubos.`);
             return;
         }
 

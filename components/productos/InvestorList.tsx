@@ -98,7 +98,7 @@ export default function InvestorList({
                                             : 'bg-slate-800/50 border-white/10 hover:border-white/20'
                                         }`}
                                 >
-                                    <div className="flex items-start gap-4">
+                                    <div className="flex flex-col sm:flex-row items-start gap-4">
                                         {/* Avatar */}
                                         <img
                                             src={inversor.icono || '/static/img/imagenPerfil.png'}
@@ -142,15 +142,18 @@ export default function InvestorList({
                                             </div>
                                         </div>
 
-                                        {/* Acciones (solo para el inversor actual) */}
-                                        {esInversorActual && onEdit && onDelete && (
-                                            <div className="flex gap-2">
+                                    </div>
+
+                                    {/* Acciones (solo para el inversor actual) - Fuera del flex principal */}
+                                    {esInversorActual && onEdit && onDelete && (
+                                        <div className="flex gap-2 mt-4 w-full">
                                                 <button
                                                     onClick={() => onEdit(inversor)}
-                                                    className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition"
+                                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-lg transition font-medium text-sm"
                                                     aria-label="Editar inversión"
                                                 >
-                                                    <i className="bx bx-edit text-xl"></i>
+                                                    <i className="bx bx-edit text-lg"></i>
+                                                    <span>Editar</span>
                                                 </button>
                                                 <button
                                                     onClick={() => {
@@ -158,14 +161,14 @@ export default function InvestorList({
                                                             onDelete(inversor);
                                                         }
                                                     }}
-                                                    className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition"
+                                                    className="flex items-center justify-center gap-2 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition font-medium text-sm"
                                                     aria-label="Eliminar inversión"
                                                 >
-                                                    <i className="bx bx-trash text-xl"></i>
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
+                                                    <i className="bx bx-trash text-lg"></i>
+                                                    <span>Eliminar</span>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })}

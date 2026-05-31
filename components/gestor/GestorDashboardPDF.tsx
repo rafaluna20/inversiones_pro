@@ -136,6 +136,7 @@ function generarHTMLReporte(
 
     const duracion = calcularDuracion(p);
     const numInversores = Array.isArray(p.inversores) ? p.inversores.length : 0;
+    const comisionGestorMonto = gananciaNeta * (comision / 100);
 
     return `
       <tr>
@@ -149,6 +150,21 @@ function generarHTMLReporte(
         <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;color:#d97706;font-size:10px;">
           ${formatearSoles(gastos)}<br/>
           <span style="font-size:8px;color:#92400e;">${ratioGastos.toFixed(1)}%</span>
+        </td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:right;">
+          <div style="font-family:monospace;color:#059669;font-weight:700;font-size:10px;">
+            +${formatearSoles(gananciaSocios)}
+          </div>
+          ${comision > 0 ? `
+          <div style="font-size:8px;color:#64748b;margin-top:2px;">
+            Total: ${formatearSoles(gananciaNeta)}<br/>
+            Comisión (${comision}%): -${formatearSoles(comisionGestorMonto)}
+          </div>
+          ` : `
+          <div style="font-size:8px;color:#64748b;margin-top:2px;">
+            Ganancia total
+          </div>
+          `}
         </td>
         <td style="padding:8px 10px;border-bottom:1px solid #e2e8f0;text-align:center;font-family:monospace;font-size:10px;">
           <span style="color:#64748b;text-decoration:line-through;">${roiBruto.toFixed(1)}%</span><br/>
@@ -453,6 +469,7 @@ function generarHTMLReporte(
           <th style="text-align:left;">Proyecto</th>
           <th>Capital</th>
           <th>Gastos</th>
+          <th>Ganancia</th>
           <th style="text-align:center;">ROI Bruto/Neto</th>
           <th style="text-align:center;">Duración</th>
           <th style="text-align:center;">Inversores</th>
