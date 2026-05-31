@@ -43,6 +43,9 @@ export default function InvestmentModal({
 
     const costoTotal = formData.cubos * precioPorCubo;
     const porcentajeParticipacion = (formData.cubos / 100) * 100;
+    const cubosFaltantes = Math.max(0, cubosDisponibles);
+    const cubosVendidos = 100 - cubosDisponibles;
+    const progresoProyecto = (cubosVendidos / 100) * 100;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -124,6 +127,39 @@ export default function InvestmentModal({
                             />
                         </div>
 
+                        {/* Progreso del Proyecto */}
+                        <div className="mb-4">
+                            <div className="flex justify-between text-xs text-gray-400 mb-2">
+                                <span>📊 Progreso del proyecto</span>
+                                <span className="font-bold">{progresoProyecto.toFixed(2)}%</span>
+                            </div>
+                            <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden border border-white/10">
+                                <div 
+                                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500"
+                                    style={{ width: `${progresoProyecto}%` }}
+                                />
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1 flex justify-between">
+                                <span>{cubosVendidos.toFixed(4)} cubos vendidos</span>
+                                <span>{cubosDisponibles.toFixed(4)} disponibles</span>
+                            </div>
+                        </div>
+
+                        {/* Cubos Faltantes */}
+                        {cubosFaltantes > 0 && (
+                            <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 mb-4">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-gray-400">Cubos disponibles:</span>
+                                    <span className="text-lg font-bold text-blue-400">
+                                        {cubosFaltantes.toFixed(4)} cubos
+                                    </span>
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                    {cubosFaltantes < 1 ? '¡Última oportunidad! Quedan menos de 1 cubo' : 'Disponibles para invertir'}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Cantidad de Cubos */}
                         <div>
                             <label htmlFor="cubos" className="block text-sm font-medium text-gray-300 mb-2">
@@ -145,8 +181,58 @@ export default function InvestmentModal({
                                 required
                             />
                             <p className="text-xs text-gray-500 mt-1">
-                                Disponibles: {cubosDisponibles.toFixed(4)} cubos | Mínimo: 0.0001 cubos
+                                Mínimo: 0.0001 cubos | Máximo: {cubosDisponibles.toFixed(4)} cubos
                             </p>
+                        </div>
+
+                        {/* Botones de Acción Rápida */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300 mb-2">
+                                Acciones Rápidas
+                            </label>
+                            <div className="grid grid-cols-4 gap-2">
+                                {cubosFaltantes > 0 && cubosFaltantes * precioPorCubo <= saldoUsuario && (
+                                    <button 
+                                        type="button" 
+                                        onClick={() => setFormData({ ...formData, cubos: Math.round(cubosFaltantes * 10000) / 10000 })}
+                                        className="col-span-2 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg text-xs font-bold transition-all shadow-lg"
+                                    >
+                                        🎯 Completar ({cubosFaltantes.toFixed(4)})
+                                    </button>
+                                )}
+                                <button 
+                                    type="button" 
+                                    onClick={() => setFormData({ ...formData, cubos: Math.round(cubosDisponibles * 0.25 * 10000) / 10000 })}
+                                    disabled={cubosDisponibles <= 0}
+                                    className="py-2 bg-slate-800/60 hover:bg-blue-500/20 border border-white/5 rounded-lg text-xs text-gray-300 hover:text-white transition-all disabled:opacity-30"
+                                >
+                                    25%
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setFormData({ ...formData, cubos: Math.round(cubosDisponibles * 0.50 * 10000) / 10000 })}
+                                    disabled={cubosDisponibles <= 0}
+                                    className="py-2 bg-slate-800/60 hover:bg-blue-500/20 border border-white/5 rounded-lg text-xs text-gray-300 hover:text-white transition-all disabled:opacity-30"
+                                >
+                                    50%
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setFormData({ ...formData, cubos: Math.round(cubosDisponibles * 0.75 * 10000) / 10000 })}
+                                    disabled={cubosDisponibles <= 0}
+                                    className="py-2 bg-slate-800/60 hover:bg-blue-500/20 border border-white/5 rounded-lg text-xs text-gray-300 hover:text-white transition-all disabled:opacity-30"
+                                >
+                                    75%
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={() => setFormData({ ...formData, cubos: Math.round(cubosDisponibles * 10000) / 10000 })}
+                                    disabled={cubosDisponibles <= 0}
+                                    className="py-2 bg-slate-800/60 hover:bg-blue-500/20 border border-white/5 rounded-lg text-xs text-gray-300 hover:text-white transition-all disabled:opacity-30 font-bold"
+                                >
+                                    MAX
+                                </button>
+                            </div>
                         </div>
 
                         {/* Categoría */}

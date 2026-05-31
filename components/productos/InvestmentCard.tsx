@@ -117,7 +117,7 @@ export default function InvestmentCard({
                         <i className={`bx bx-cube ${estaCompleto ? 'text-yellow-400' : 'text-blue-400'}`}></i>
                         <span className="text-xs text-gray-400">Cubos libres</span>
                     </div>
-                    <p className="text-2xl font-bold text-white">{cubosDisponibles}</p>
+                    <p className="text-2xl font-bold text-white">{cubosDisponibles.toFixed(4)}</p>
                     <p className="text-xs text-gray-500">de 100 totales</p>
                 </div>
 
