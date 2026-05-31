@@ -42,9 +42,14 @@ export default function TrackRecordGestorPDF({ proyectos, distribuciones, gestor
     const utilidadTotalGeneradaParaSocios = proyectosLiquidados.reduce((sum, p) => {
       const dist = distribuciones.find(d => d.proyectoId === p.id);
       const capital = Number(p.precio || p.monto || 0);
-      const comision = Number(p.comisionGestor || 10);
-      const utilidadNeta = Number(p.utilidadNeta || (capital * 0.15));
-      const poolSocios = dist ? Number(dist.poolSocios) : (utilidadNeta * (1 - comision / 100));
+      const gastos = Number(p.totalGastos || 0);
+      const montoVenta = Number(p.monto || capital);
+      const costoTotal = capital + gastos;
+      const comision = Number(p.comisionGestor || 0);
+      
+      // CORRECCIÓN: Calcular ganancia neta REAL
+      const gananciaNeta = montoVenta - costoTotal;
+      const poolSocios = dist ? Number(dist.poolSocios) : (gananciaNeta * (1 - comision / 100));
       return sum + poolSocios;
     }, 0);
     
@@ -57,9 +62,14 @@ export default function TrackRecordGestorPDF({ proyectos, distribuciones, gestor
       .map((p) => {
         const dist = distribuciones.find(d => d.proyectoId === p.id);
         const capital = Number(p.precio || p.monto || 0);
-        const comision = Number(p.comisionGestor || 10);
-        const utilidadNeta = Number(p.utilidadNeta || (capital * 0.15));
-        const gananciaSocios = dist ? Number(dist.poolSocios) : (utilidadNeta * (1 - comision / 100));
+        const gastos = Number(p.totalGastos || 0);
+      const montoVenta = Number(p.monto || capital);
+      const costoTotal = capital + gastos;
+      const comision = Number(p.comisionGestor || 0);
+        
+        // CORRECCIÓN: Calcular ganancia neta REAL
+        const gananciaNeta = montoVenta - costoTotal;
+        const gananciaSocios = dist ? Number(dist.poolSocios) : (gananciaNeta * (1 - comision / 100));
         const roiProyecto = capital > 0 ? (gananciaSocios / capital) * 100 : 0;
         const rawDate = p.fechaDistribucion || p.creado;
         let fechaLiq = 'N/A';

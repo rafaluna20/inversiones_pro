@@ -23,6 +23,7 @@ import ProfitDistributionModal from '@/components/productos/ProfitDistributionMo
 import ProjectClosureReport from '@/components/productos/ProjectClosureReport';
 import PriceEditModal from '@/components/productos/PriceEditModal';
 import MobileInvestmentCTA from '@/components/productos/MobileInvestmentCTA';
+import GastosProyecto from '@/components/productos/GastosProyecto';
 import restarSaldo from '@/Validacion/restarSaldo';
 import sumarSaldo from '@/Validacion/sumarSaldo';
 import sumarSaldoAcumulado from '@/Validacion/sumarSaldoAcumulado';
@@ -527,12 +528,13 @@ export default function ProductoDetallesPage() {
   const hasVoted = producto.haVotado?.includes(usuario?.uid) || false;
   const esCreador = usuario?.uid === producto.creador?.id;
   const inversores = producto.inversores || [];
+  const esSocio = inversores.some((inv: Inversor) => inv.usuarioId === usuario?.uid);
   const totalCubos = inversores.reduce((sum: number, inv: Inversor) => sum + inv.cubos, 0);
   const cubosDisponibles = 100 - totalCubos;
   const precioPorCubo = producto.precio / 100;
   const porcentajeVendido = (totalCubos / 100) * 100;
   const recaudado = (totalCubos * producto.precio) / 100;
-  const yaInvirtio = inversores.some((inv: Inversor) => inv.usuarioId === usuario?.uid);
+  const yaInvirtio = esSocio; // Alias para mantener compatibilidad
 
   return (
     <div className="min-h-screen bg-slate-950 py-8 px-4">
@@ -796,6 +798,19 @@ export default function ProductoDetallesPage() {
                       </div>
                     ),
                   },
+                  ...((esCreador || esSocio) ? [{
+                    id: 'gastos',
+                    label: 'Gastos',
+                    icon: 'bx-receipt',
+                    badge: producto.totalGastos && producto.totalGastos > 0 ? '💰' : undefined,
+                    content: (
+                      <GastosProyecto
+                        proyectoId={producto.id}
+                        usuarioId={usuario?.uid}
+                        esCreadorOSocio={esCreador || esSocio}
+                      />
+                    ),
+                  }] : []),
                   ...(esCreador ? [{
                     id: 'admin',
                     label: 'Admin',
@@ -912,9 +927,15 @@ export default function ProductoDetallesPage() {
                   inversores: inversores,
                   creador: producto.creador,
                   categoria: producto.categoria,
+                  totalGastos: producto.totalGastos,
+                  costoTotalProyecto: producto.costoTotalProyecto,
+                  gananciaBruta: producto.gananciaBruta,
+                  gananciaNeta: producto.gananciaNeta,
+                  roiReal: producto.roiReal,
                 }}
                 esCreador={esCreador}
                 usuarioId={usuario?.uid}
+                proyectoId={params.id as string}
               />
             )}
           </div>

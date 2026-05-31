@@ -59,13 +59,24 @@ export default function ConsolidatedPortfolioReport({ usuario, inversiones, proy
         const fechaActual = format(new Date(), "dd 'de' MMMM 'de' yyyy, HH:mm", { locale: es });
         const codigoDoc = `ST-${new Date().getTime().toString().slice(-6)}-${usuario.uid.slice(0, 4).toUpperCase()}`;
 
-        // 1. Filtrar inversiones confirmadas y mapear nombre del proyecto
+        // 1. Filtrar inversiones confirmadas y mapear nombre del proyecto con info de gastos
         const inversionesConfirmadas = inversiones.filter(inv => inv.confirmada !== false).map(inv => {
             const proyectoInfo = proyectos.find(p => p.id === inv.proyectoId);
+            const tieneGastos = (proyectoInfo?.totalGastos || 0) > 0;
+            const totalGastos = proyectoInfo?.totalGastos || 0;
+            const roiRealProyecto = proyectoInfo?.roiReal;
+            const roiBrutoProyecto = proyectoInfo?.gananciaBruta && proyectoInfo?.precio
+                ? ((proyectoInfo.gananciaBruta / proyectoInfo.precio) * 100)
+                : null;
+            
             return {
                 ...inv,
                 proyectoNombre: proyectoInfo?.nombre || inv.proyectoNombre || 'Proyecto Inmobiliario',
-                gananciaEstimada: inv.gananciaEstimada || (inv.montoInvertido * ((inv.roiProyectado || 0) / 100))
+                gananciaEstimada: inv.gananciaEstimada || (inv.montoInvertido * ((inv.roiProyectado || 0) / 100)),
+                tieneGastos,
+                totalGastos,
+                roiRealProyecto,
+                roiBrutoProyecto
             };
         });
         const inversionesActivas = inversionesConfirmadas.filter(inv => !inv.roiReal);
@@ -76,12 +87,13 @@ export default function ConsolidatedPortfolioReport({ usuario, inversiones, proy
         const hashAuditoria = await generateSHA256(hashInput);
 
         // 3. Filas dinámicas de la Página 2 (Activos en Curso)
-        const filasActivas = inversionesActivas.length > 0 
+        const filasActivas = inversionesActivas.length > 0
             ? inversionesActivas.map((inv) => `
                 <tr>
                     <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:left;">
                         <strong style="color:#0f172a;font-size:12px;">${inv.proyectoNombre || 'Proyecto en Desarrollo'}</strong><br/>
                         <span style="color:#64748b;font-size:10px;">ID Proyecto: #${inv.proyectoId.slice(0, 8).toUpperCase()}</span>
+                        ${inv.tieneGastos ? `<br/><span style="color:#dc2626;font-size:9px;font-weight:600;">⚠️ Gastos: ${formatCurrency(inv.totalGastos)}</span>` : ''}
                     </td>
                     <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:center;font-family:monospace;font-weight:700;">
                         ${inv.cubosComprados} Cubos
@@ -90,7 +102,7 @@ export default function ConsolidatedPortfolioReport({ usuario, inversiones, proy
                         ${formatCurrency(inv.montoInvertido)}
                     </td>
                     <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;color:#4f46e5;font-weight:700;">
-                        ${(inv.roiProyectado || 0).toFixed(2)}%
+                        ${(inv.roiProyectado || 0).toFixed(2)}%${inv.tieneGastos ? '<br/><span style="font-size:9px;color:#94a3b8;">(sin gastos)</span>' : ''}
                     </td>
                     <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;font-weight:700;color:#0f172a;">
                         ${formatCurrency(inv.montoInvertido + (inv.gananciaEstimada || 0))}
@@ -100,12 +112,17 @@ export default function ConsolidatedPortfolioReport({ usuario, inversiones, proy
             : `<tr><td colspan="5" style="padding:20px;text-align:center;color:#94a3b8;">No se registran proyectos activos en cartera.</td></tr>`;
 
         // 4. Filas dinámicas de la Página 3 (Liquidadas Culminadas)
-        const filasLiquidadas = inversionesLiquidadas.length > 0 
-            ? inversionesLiquidadas.map((inv) => `
+        const filasLiquidadas = inversionesLiquidadas.length > 0
+            ? inversionesLiquidadas.map((inv) => {
+                const roiMostrar = inv.roiRealProyecto !== undefined ? inv.roiRealProyecto : (inv.roiReal || inv.roiProyectado || 0);
+                const esRoiReal = inv.tieneGastos && inv.roiRealProyecto !== undefined;
+                
+                return `
                 <tr>
                     <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:left;">
                         <strong style="color:#0f172a;font-size:12px;">${inv.proyectoNombre || 'Proyecto Culminado'}</strong><br/>
                         <span style="color:#64748b;font-size:10px;">ID Proyecto: #${inv.proyectoId.slice(0, 8).toUpperCase()}</span>
+                        ${inv.tieneGastos ? `<br/><span style="color:#059669;font-size:9px;font-weight:600;">✓ Con gastos registrados (${formatCurrency(inv.totalGastos)})</span>` : ''}
                     </td>
                     <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;color:#334155;">
                         ${formatCurrency(inv.montoInvertido)}
@@ -117,10 +134,11 @@ export default function ConsolidatedPortfolioReport({ usuario, inversiones, proy
                         +${formatCurrency(inv.gananciaReal || 0)}
                     </td>
                     <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;color:#10b981;font-weight:700;">
-                        ${(inv.roiReal || inv.roiProyectado || 0).toFixed(2)}%
+                        ${roiMostrar.toFixed(2)}%${esRoiReal ? '<br/><span style="font-size:9px;color:#059669;">(ROI real)</span>' : ''}
+                        ${inv.tieneGastos && inv.roiBrutoProyecto !== null && inv.roiBrutoProyecto !== roiMostrar ? `<br/><span style="font-size:8px;color:#94a3b8;">Sin gastos: ${inv.roiBrutoProyecto.toFixed(2)}%</span>` : ''}
                     </td>
-                </tr>
-            `).join('')
+                </tr>`;
+            }).join('')
             : `<tr><td colspan="5" style="padding:20px;text-align:center;color:#94a3b8;">No se registran proyectos liquidados en el histórico.</td></tr>`;
 
         const htmlContent = `<!DOCTYPE html>

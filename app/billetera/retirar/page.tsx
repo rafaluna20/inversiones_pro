@@ -1,4 +1,4 @@
-'use client';
+npm'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -200,19 +200,18 @@ export default function RetirarHaciaBilleteraPage() {
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-3.5 text-gray-500 font-bold">S/</span>
-                <input
-                  type="number"
-                  id="monto"
-                  value={monto}
-                  onChange={(e) => { setMonto(e.target.value); setError(''); }}
-                  placeholder="0.00"
-                  min="1"
-                  max={saldoFirebase}
-                  step="0.01"
-                  className="w-full bg-slate-950/50 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-red-500 transition-colors text-lg font-mono"
-                  required
-                  disabled={processing}
-                />
+                  <input
+                    type="number"
+                    id="monto"
+                    value={monto}
+                    onChange={(e) => { setMonto(e.target.value); setError(''); }}
+                    placeholder="0.00"
+                    min="0.01"
+                    step="0.01"
+                    className="w-full bg-slate-950/50 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-red-500 transition-colors text-lg font-mono"
+                    required
+                    disabled={processing}
+                  />
               </div>
             </div>
 

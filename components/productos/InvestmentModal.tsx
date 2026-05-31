@@ -35,7 +35,7 @@ export default function InvestmentModal({
     const [formData, setFormData] = useState<InversionData>(
         initialData || {
             descripcion: '',
-            cubos: 1,
+            cubos: 0.0001,
             categoria: 'Inversor',
         }
     );
@@ -53,8 +53,8 @@ export default function InvestmentModal({
             return;
         }
 
-        if (formData.cubos < 1) {
-            showToast.error('Debes invertir al menos 1 cubo');
+        if (formData.cubos < 0.0001) {
+            showToast.error('Debes invertir al menos 0.0001 cubos');
             return;
         }
 
@@ -132,17 +132,20 @@ export default function InvestmentModal({
                             <input
                                 id="cubos"
                                 type="number"
+                                step="0.0001"
                                 value={formData.cubos}
-                                onChange={(e) =>
-                                    setFormData({ ...formData, cubos: parseInt(e.target.value) || 1 })
-                                }
+                                onChange={(e) => {
+                                    const valor = parseFloat(e.target.value) || 0.0001;
+                                    const redondeado = Math.round(valor * 10000) / 10000;
+                                    setFormData({ ...formData, cubos: redondeado });
+                                }}
                                 className="input"
-                                min={1}
+                                min={0.0001}
                                 max={cubosDisponibles}
                                 required
                             />
                             <p className="text-xs text-gray-500 mt-1">
-                                Disponibles: {cubosDisponibles} cubos
+                                Disponibles: {cubosDisponibles.toFixed(4)} cubos | Mínimo: 0.0001 cubos
                             </p>
                         </div>
 
@@ -177,9 +180,15 @@ export default function InvestmentModal({
                                 </span>
                             </div>
                             <div className="flex justify-between text-sm">
+                                <span className="text-gray-400">Cubos:</span>
+                                <span className="text-blue-400 font-semibold">
+                                    {formData.cubos.toFixed(4)} cubos
+                                </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
                                 <span className="text-gray-400">Participación:</span>
                                 <span className="text-blue-400 font-semibold">
-                                    {porcentajeParticipacion.toFixed(2)}%
+                                    {porcentajeParticipacion.toFixed(4)}%
                                 </span>
                             </div>
                             <div className="flex justify-between pt-2 border-t border-white/10">

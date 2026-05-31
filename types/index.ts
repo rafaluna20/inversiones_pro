@@ -114,6 +114,22 @@ export interface Producto {
   fechaInicioConstruccion?: number;
   fechaFinalizacion?: number;
   updatedAt?: number;
+
+  // ⭐ SISTEMA DE GASTOS Y CONTABILIDAD REAL
+  /** Lista de gastos asociados al proyecto (se almacenan en subcolección) */
+  gastos?: GastoProyecto[];
+  /** Suma total de todos los gastos del proyecto */
+  totalGastos?: number;
+  /** Costo total real del proyecto (precio inicial + totalGastos) */
+  costoTotalProyecto?: number;
+  /** Precio de venta final del proyecto */
+  precioVenta?: number;
+  /** Ganancia bruta (precioVenta - precio) sin considerar gastos */
+  gananciaBruta?: number;
+  /** Ganancia neta real (precioVenta - costoTotalProyecto) */
+  gananciaNeta?: number;
+  /** ROI real calculado sobre costo total: (gananciaNeta / costoTotalProyecto) * 100 */
+  roiReal?: number;
 }
 
 // Etapa del Proyecto (Tierra o Construcción)
@@ -142,6 +158,49 @@ export interface EtapaProyecto {
   completada: boolean;
   activa: boolean;
 }
+
+// ============================================
+// SISTEMA DE GASTOS DE PROYECTOS
+// ============================================
+
+/**
+ * Categorías de gastos permitidas para proyectos inmobiliarios
+ */
+export type CategoriaGasto =
+  | 'notaria'
+  | 'impuestos'
+  | 'remodelacion'
+  | 'construccion'
+  | 'legal'
+  | 'marketing'
+  | 'mantenimiento'
+  | 'visitas'
+  | 'servicios'
+  | 'otros';
+
+/**
+ * Interface para gastos detallados de un proyecto
+ */
+export interface GastoProyecto {
+  id: string;
+  proyectoId: string;
+  concepto: string;
+  categoria: CategoriaGasto;
+  monto: number;
+  fecha: number;
+  comprobante?: string;  // URL del comprobante/factura
+  aprobadoPor?: string;  // UID del usuario que aprobó
+  registradoPor: string; // UID del usuario que registró
+  descripcion?: string;
+  proveedor?: string;
+  estado?: 'pendiente' | 'aprobado' | 'rechazado';
+  createdAt: number;
+  updatedAt: number;
+}
+
+// ============================================
+// TIPOS DE TRANSACCIÓN
+// ============================================
 
 // Tipos de Transacción
 export type TipoTransaccion =

@@ -332,15 +332,83 @@ export const transferenciaSchema = z.object({
 );
 
 /**
- * Validación para distribución de ganancias
+ * Schema base para gastos (sin refine, para poder usar .partial())
+ */
+const gastoBaseSchema = z.object({
+  proyectoId: objectIdSchema,
+  concepto: z.string()
+    .min(3, 'El concepto debe tener al menos 3 caracteres')
+    .max(200, 'El concepto no puede exceder 200 caracteres'),
+  categoria: z.enum([
+    'notaria',
+    'impuestos',
+    'remodelacion',
+    'construccion',
+    'legal',
+    'marketing',
+    'mantenimiento',
+    'visitas',
+    'servicios',
+    'otros'
+  ], {
+    errorMap: () => ({ message: 'Categoría de gasto no válida' })
+  }),
+  monto: montoSchema,
+  fecha: z.number().positive('La fecha debe ser un timestamp válido'),
+  comprobante: z.string().url('Debe ser una URL válida').optional(),
+  descripcion: z.string().max(500, 'La descripción no puede exceder 500 caracteres').optional(),
+  proveedor: z.string().max(100, 'El nombre del proveedor no puede exceder 100 caracteres').optional(),
+  registradoPor: objectIdSchema
+});
+
+/**
+ * Validación para registrar gastos de proyecto (con validación de comprobante)
+ */
+export const registrarGastoSchema = gastoBaseSchema.refine(
+  data => {
+    // Si el monto es mayor a 500, el comprobante es obligatorio
+    if (data.monto > 500 && !data.comprobante) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: 'Gastos mayores a S/ 500 requieren comprobante',
+    path: ['comprobante']
+  }
+);
+
+/**
+ * Validación para actualizar un gasto
+ */
+export const actualizarGastoSchema = gastoBaseSchema.partial().extend({
+  id: objectIdSchema
+});
+
+/**
+ * Validación para eliminar un gasto
+ */
+export const eliminarGastoSchema = z.object({
+  proyectoId: objectIdSchema,
+  gastoId: objectIdSchema,
+  eliminadoPor: objectIdSchema,
+  motivo: z.string().min(10, 'Debes especificar el motivo de eliminación (mínimo 10 caracteres)').optional()
+});
+
+/**
+ * Validación para distribución de ganancias (MEJORADA)
  */
 export const distribuirGananciasSchema = z.object({
   proyectoId: objectIdSchema,
   precioVenta: montoSchema,
-  gastosAdicionales: montoSchema.default(0),
+  // ❌ ELIMINADO: gastosAdicionales (ahora se calcula automático desde la subcolección)
   impuestos: montoSchema.default(0),
   distribuirPor: objectIdSchema, // Admin que ejecuta distribución
-  notificarSocios: z.boolean().default(true)
+  notificarSocios: z.boolean().default(true),
+  // ✅ NUEVO: Confirmación de que se revisaron los gastos
+  gastosRevisados: z.boolean().refine(val => val === true, {
+    message: 'Debes revisar y confirmar todos los gastos antes de distribuir ganancias'
+  })
 });
 
 // ========================

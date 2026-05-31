@@ -7,6 +7,7 @@ import useDistribucionesGestor from '@/Hooks/useDistribucionesGestor';
 import { ejecutarDistribucionAction } from '@/app/actions/distribucion';
 import ComprobantePDF from '@/components/gestor/ComprobantePDF';
 import TrackRecordGestorPDF from '@/components/gestor/TrackRecordGestorPDF';
+import GestorDashboardPDF from '@/components/gestor/GestorDashboardPDF';
 import { formatearSoles } from '@/lib/distribucion';
 import { showToast } from '@/lib/toast';
 import Link from 'next/link';
@@ -246,11 +247,20 @@ export default function GestorPage() {
             <p className="text-gray-400 text-lg">Administra tus proyectos y ejecuta distribuciones de utilidades</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
+            {/* Reporte Empresarial Completo (NUEVO) */}
+            <GestorDashboardPDF 
+              proyectos={proyectos} 
+              distribuciones={distribuciones} 
+              gestorNombre={usuario.displayName || usuario.email || 'Gestor'} 
+            />
+            
+            {/* Reporte Básico (Anterior) */}
             <TrackRecordGestorPDF 
               proyectos={proyectos} 
               distribuciones={distribuciones} 
               gestorNombre={usuario.displayName || usuario.email || 'Gestor'} 
             />
+            
             <Link
               href="/productos/nuevo"
               className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white rounded-xl font-bold shadow-lg shadow-amber-900/20 transition"

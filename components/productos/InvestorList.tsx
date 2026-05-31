@@ -55,7 +55,7 @@ export default function InvestorList({
                     <div className="space-y-1 text-sm">
                         <div className="flex justify-between">
                             <span className="text-gray-400">Cubos vendidos:</span>
-                            <span className="text-white font-semibold">{totalCubos} / 100</span>
+                            <span className="text-white font-semibold">{totalCubos.toFixed(4)} / 100</span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-gray-400">Inversores:</span>
@@ -127,8 +127,8 @@ export default function InvestorList({
                                             <div className="flex flex-wrap items-center gap-4 text-sm">
                                                 <div className="flex items-center gap-1.5">
                                                     <i className="bx bx-cube text-blue-400"></i>
-                                                    <span className="text-white font-semibold">{inversor.cubos} cubos</span>
-                                                    <span className="text-gray-500">({porcentaje.toFixed(2)}%)</span>
+                                                    <span className="text-white font-semibold">{inversor.cubos.toFixed(4)} cubos</span>
+                                                    <span className="text-gray-500">({porcentaje.toFixed(4)}%)</span>
                                                 </div>
                                                 <div className="flex items-center gap-1.5">
                                                     <i className="bx bx-dollar text-green-400"></i>
