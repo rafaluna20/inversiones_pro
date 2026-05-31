@@ -1,8 +1,23 @@
 'use client';
 
-import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
 import { FaTimes, FaExternalLinkAlt } from 'react-icons/fa';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
+import 'leaflet/dist/leaflet.css';
+
+// Importación dinámica para Leaflet para evitar errores en SSR
+const MapContainer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.MapContainer),
+  { ssr: false }
+);
+const TileLayer = dynamic(
+  () => import('react-leaflet').then((mod) => mod.TileLayer),
+  { ssr: false }
+);
+const Marker = dynamic(
+  () => import('react-leaflet').then((mod) => mod.Marker),
+  { ssr: false }
+);
 
 interface MapModalProps {
     isOpen: boolean;
@@ -14,11 +29,6 @@ interface MapModalProps {
     projectName?: string;
     address?: string;
 }
-
-const mapContainerStyle = {
-    width: '100%',
-    height: '100%',
-};
 
 const defaultCenter = {
     lat: -12.0464, // Lima, Perú por defecto
@@ -33,7 +43,22 @@ export default function MapModal({
     address 
 }: MapModalProps) {
     const center = coordinates?.lat && coordinates?.lng ? coordinates : defaultCenter;
+    const [mounted, setMounted] = useState(false);
     
+    // Necesario para arreglar los iconos de Leaflet en Next.js
+    useEffect(() => {
+        setMounted(true);
+        (async function init() {
+            const L = await import('leaflet');
+            delete (L.Icon.Default.prototype as any)._getIconUrl;
+            L.Icon.Default.mergeOptions({
+                iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+                iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+            });
+        })();
+    }, []);
+
     // Cerrar modal con tecla ESC y manejar scroll
     useEffect(() => {
         if (!isOpen) return;
@@ -58,6 +83,8 @@ export default function MapModal({
         window.open(url, '_blank');
     };
 
+    if (!mounted) return null;
+
     return (
         <div
             className={`fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm transition-opacity duration-200 ${
@@ -72,15 +99,15 @@ export default function MapModal({
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-slate-900 via-slate-900/95 to-transparent p-6">
-                    <div className="flex items-center justify-between">
+                <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-slate-900 via-slate-900/95 to-transparent p-6 pointer-events-none">
+                    <div className="flex items-center justify-between pointer-events-auto">
                         <div>
                             <h3 className="text-2xl font-bold text-white mb-1">
                                 📍 Ubicación del Proyecto
                             </h3>
-                            <p className="text-blue-400 font-semibold">{projectName}</p>
+                            <p className="text-blue-400 font-semibold shadow-black drop-shadow-md">{projectName}</p>
                             {address && (
-                                <p className="text-sm text-slate-400 mt-1">{address}</p>
+                                <p className="text-sm text-slate-300 mt-1 drop-shadow-md shadow-black">{address}</p>
                             )}
                         </div>
                         
@@ -104,59 +131,31 @@ export default function MapModal({
                     </div>
                 </div>
 
-                {/* Map Container */}
-                <div className="w-full h-full">
-                    <LoadScript googleMapsApiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''}>
-                        <GoogleMap
-                            mapContainerStyle={mapContainerStyle}
-                            center={center}
-                            zoom={15}
-                            options={{
-                                styles: [
-                                    {
-                                        elementType: 'geometry',
-                                        stylers: [{ color: '#1e293b' }],
-                                    },
-                                    {
-                                        elementType: 'labels.text.stroke',
-                                        stylers: [{ color: '#0f172a' }],
-                                    },
-                                    {
-                                        elementType: 'labels.text.fill',
-                                        stylers: [{ color: '#cbd5e1' }],
-                                    },
-                                    {
-                                        featureType: 'water',
-                                        elementType: 'geometry',
-                                        stylers: [{ color: '#3b82f6' }],
-                                    },
-                                    {
-                                        featureType: 'road',
-                                        elementType: 'geometry',
-                                        stylers: [{ color: '#334155' }],
-                                    },
-                                ],
-                                disableDefaultUI: false,
-                                zoomControl: true,
-                                mapTypeControl: true,
-                                streetViewControl: true,
-                                fullscreenControl: true,
-                            }}
+                {/* Map Container - Usando react-leaflet (OpenStreetMap) */}
+                <div className="w-full h-full z-0">
+                    {isOpen && (
+                        <MapContainer 
+                            center={[center.lat, center.lng]} 
+                            zoom={15} 
+                            style={{ height: '100%', width: '100%' }}
+                            zoomControl={true}
                         >
-                            <Marker
-                                position={center}
+                            <TileLayer
+                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
-                        </GoogleMap>
-                    </LoadScript>
+                            <Marker position={[center.lat, center.lng]} />
+                        </MapContainer>
+                    )}
                 </div>
 
                 {/* Footer Info */}
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900 via-slate-900/95 to-transparent p-6">
-                    <div className="flex items-center justify-between text-sm text-slate-400">
-                        <span>
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-slate-900 via-slate-900/95 to-transparent p-6 pointer-events-none">
+                    <div className="flex items-center justify-between text-sm text-slate-300 pointer-events-auto">
+                        <span className="drop-shadow-md shadow-black font-medium">
                             Coordenadas: {center.lat.toFixed(6)}, {center.lng.toFixed(6)}
                         </span>
-                        <span className="text-slate-500">
+                        <span className="text-slate-400">
                             Presiona ESC para cerrar
                         </span>
                     </div>
