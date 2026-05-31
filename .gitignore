@@ -34,7 +34,9 @@ firebase-debug.log
 firestore-debug.log
 .firebase/
 scripts/serviceAccountKey.json
+scripts/app-invesiones-firebase-adminsdk-fbsvc-8f1623f8dd.json
 **/serviceAccountKey.json
+**/*firebase-adminsdk*.json
 
 # vercel
 .vercel
