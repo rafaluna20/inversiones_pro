@@ -145,7 +145,7 @@ export default function ProjectClosureReport({ producto, esCreador, usuarioId, p
     console.log('Diferencia ROI:', diferenciaROI.toFixed(2), 'puntos porcentuales');
     console.log('Diferencia Ganancia:', diferenciaGanancia);
     
-    const gananciaTotalDistribuida = montoVenta;
+    const gananciaTotalDistribuida = montoVenta - totalGastos;
     const codigoOperacion = `OP-${new Date(producto.creado).getFullYear()}-${producto.id.slice(0, 6).toUpperCase()}`;
     const fechaGeneracion = new Date().toLocaleDateString('es-PE', { year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -405,7 +405,7 @@ export default function ProjectClosureReport({ producto, esCreador, usuarioId, p
           <td style="text-align:center;color:#111;font-family:monospace;">${totalCubos.toFixed(4)}</td>
           <td style="text-align:center;color:#111;">100%</td>
           <td style="text-align:right;color:#2563eb;">${formatCurrency(capitalRecaudado)}</td>
-          <td style="text-align:right;color:#111;">${formatCurrency(montoVenta)}</td>
+          <td style="text-align:right;color:#111;">${formatCurrency(gananciaTotalDistribuida)}</td>
           <td style="text-align:right;color:#059669;">${gananciaNeta >= 0 ? '+' : ''}${formatCurrency(gananciaNeta)}</td>
         </tr>
       </tfoot>
@@ -817,7 +817,7 @@ export default function ProjectClosureReport({ producto, esCreador, usuarioId, p
                                         <td className="px-4 py-3 text-center font-mono font-bold text-white">{totalCubos.toFixed(4)}</td>
                                         <td className="px-4 py-3 text-center font-bold text-white">100%</td>
                                         <td className="px-4 py-3 text-right font-mono font-bold text-blue-400">{formatCurrency(capitalRecaudado)}</td>
-                                        <td className="px-4 py-3 text-right font-mono font-bold text-white">{formatCurrency(montoVenta)}</td>
+                                        <td className="px-4 py-3 text-right font-mono font-bold text-white">{formatCurrency(gananciaTotalDistribuida)}</td>
                                         <td className="px-4 py-3 text-right font-mono font-bold text-emerald-400">{gananciaNeta >= 0 ? '+' : ''}{formatCurrency(gananciaNeta)}</td>
                                     </tr>
                                 </tfoot>
