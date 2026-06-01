@@ -366,14 +366,14 @@ const gastoBaseSchema = z.object({
  */
 export const registrarGastoSchema = gastoBaseSchema.refine(
   data => {
-    // Si el monto es mayor a 500, el comprobante es obligatorio
-    if (data.monto > 500 && !data.comprobante) {
+    // Si el monto es mayor a 1000, el comprobante es obligatorio
+    if (data.monto > 1000 && !data.comprobante) {
       return false;
     }
     return true;
   },
   {
-    message: 'Gastos mayores a S/ 500 requieren comprobante',
+    message: 'Gastos mayores a S/ 1000 requieren comprobante',
     path: ['comprobante']
   }
 );

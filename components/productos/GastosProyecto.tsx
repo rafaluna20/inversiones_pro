@@ -111,8 +111,8 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
       return;
     }
 
-    if (monto > 500 && !formData.comprobante) {
-      alert('Es obligatorio adjuntar un comprobante para gastos mayores a S/ 500');
+    if (monto > 1000 && !formData.comprobante) {
+      alert('Es obligatorio adjuntar un comprobante para gastos mayores a S/ 1000');
       return;
     }
 
@@ -608,7 +608,7 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
               {/* Comprobante */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Comprobante {parseFloat(formData.monto) > 500 ? '*' : '(opcional)'}
+                  Comprobante {parseFloat(formData.monto) > 1000 ? '*' : '(opcional)'}
                 </label>
                 <div className="flex items-center gap-4">
                   <input
@@ -643,9 +643,9 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
                     </a>
                   )}
                 </div>
-                {parseFloat(formData.monto) > 500 && !formData.comprobante && (
+                {parseFloat(formData.monto) > 1000 && !formData.comprobante && (
                   <p className="text-yellow-400 text-xs mt-2">
-                    ⚠️ Obligatorio adjuntar imagen o PDF para gastos mayores a S/ 500.
+                    ⚠️ Obligatorio adjuntar imagen o PDF para gastos mayores a S/ 1000.
                   </p>
                 )}
               </div>
