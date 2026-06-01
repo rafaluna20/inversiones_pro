@@ -37,7 +37,7 @@ function ModalLiquidacion({
   const [loading, setLoading] = useState(false);
   const { usuario } = useAutenticacion();
 
-  const comision = Number(proyecto.comisionGestor || 10);
+  const comision = proyecto.comisionGestor !== undefined && proyecto.comisionGestor !== null ? Number(proyecto.comisionGestor) : 10;
   const utilidad = Number(utilidadNeta) || 0;
   const feePreview = utilidad * (comision / 100);
   const poolPreview = utilidad - feePreview;
@@ -143,9 +143,9 @@ function ModalLiquidacion({
 
 // Fila de proyecto en el dashboard
 function FilaProyecto({ proyecto, onLiquidar, distribucion }: { proyecto: any; onLiquidar: (p: any) => void; distribucion?: any }) {
-  const comision = Number(proyecto.comisionGestor || 10);
+  const comision = proyecto.comisionGestor !== undefined && proyecto.comisionGestor !== null ? Number(proyecto.comisionGestor) : 10;
   const capital = Number(proyecto.monto || proyecto.precio || 0);
-  const estaLiquidado = proyecto.distribucionEjecutada === true;
+  const estaLiquidado = proyecto.distribucionEjecutada === true || proyecto.estado === false;
 
   return (
     <div className={`bg-slate-900/50 border ${estaLiquidado ? 'border-emerald-500/20' : 'border-white/10'} rounded-2xl p-5 flex flex-col md:flex-row md:items-center gap-4`}>
