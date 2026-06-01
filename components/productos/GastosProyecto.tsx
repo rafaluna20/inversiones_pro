@@ -17,8 +17,12 @@ import {
   FileCheck,
   Filter,
   BarChart3,
-  AlertTriangle
+  AlertTriangle,
+  Upload,
+  Loader2
 } from 'lucide-react';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { storage } from '@/lib/firebase/config';
 
 interface GastosProyectoProps {
   proyectoId: string;
@@ -77,8 +81,12 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
     fecha: new Date().toISOString().split('T')[0],
     descripcion: '',
     proveedor: '',
-    estado: 'aprobado' as 'pendiente' | 'aprobado' | 'rechazado'
+    estado: 'aprobado' as 'pendiente' | 'aprobado' | 'rechazado',
+    comprobante: ''
   });
+
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Filtrar gastos
   const gastosFiltrados = useMemo(() => {
@@ -103,6 +111,11 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
       return;
     }
 
+    if (monto > 500 && !formData.comprobante) {
+      alert('Es obligatorio adjuntar un comprobante para gastos mayores a S/ 500');
+      return;
+    }
+
     try {
       setSubmitting(true);
       
@@ -114,7 +127,8 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
         descripcion: formData.descripcion || undefined,
         proveedor: formData.proveedor || undefined,
         registradoPor: usuarioId || '',
-        estado: formData.estado
+        estado: formData.estado,
+        comprobante: formData.comprobante || undefined
       };
 
       if (gastoEditando) {
@@ -131,7 +145,8 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
         fecha: new Date().toISOString().split('T')[0],
         descripcion: '',
         proveedor: '',
-        estado: 'aprobado'
+        estado: 'aprobado',
+        comprobante: ''
       });
       setMostrarModal(false);
       setGastoEditando(null);
@@ -152,10 +167,47 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
         fecha: new Date(gasto.fecha).toISOString().split('T')[0],
         descripcion: gasto.descripcion || '',
         proveedor: gasto.proveedor || '',
-        estado: gasto.estado || 'aprobado'
+        estado: gasto.estado || 'aprobado',
+        comprobante: gasto.comprobante || ''
       });
       setGastoEditando(gastoId);
       setMostrarModal(true);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setUploadingFile(true);
+      setUploadProgress(0);
+      
+      const fileExtension = file.name.split('.').pop();
+      const fileName = `gasto_${Date.now()}.${fileExtension}`;
+      const storageRef = ref(storage, `proyectos/${proyectoId}/gastos/${fileName}`);
+      
+      const uploadTask = uploadBytesResumable(storageRef, file);
+      
+      uploadTask.on('state_changed', 
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+        },
+        (error) => {
+          console.error('Error al subir el comprobante:', error);
+          setUploadingFile(false);
+          alert('Error al subir el comprobante');
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          setFormData({ ...formData, comprobante: downloadURL });
+          setUploadingFile(false);
+        }
+      );
+    } catch (err) {
+      console.error('Upload error:', err);
+      setUploadingFile(false);
     }
   };
 
@@ -551,6 +603,51 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
                     placeholder="Nombre del proveedor"
                   />
                 </div>
+              </div>
+
+              {/* Comprobante */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Comprobante {parseFloat(formData.monto) > 500 ? '*' : '(opcional)'}
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    type="file"
+                    id="comprobante-upload"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    disabled={uploadingFile}
+                  />
+                  <label
+                    htmlFor="comprobante-upload"
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-800 border border-white/10 hover:border-emerald-500/50 rounded-lg cursor-pointer transition-colors text-sm text-gray-300"
+                  >
+                    {uploadingFile ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    {uploadingFile ? `Subiendo ${Math.round(uploadProgress)}%` : 'Seleccionar Archivo'}
+                  </label>
+                  
+                  {formData.comprobante && (
+                    <a
+                      href={formData.comprobante}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-400 text-sm hover:underline flex items-center gap-1"
+                    >
+                      <FileCheck className="w-4 h-4" />
+                      Archivo adjunto
+                    </a>
+                  )}
+                </div>
+                {parseFloat(formData.monto) > 500 && !formData.comprobante && (
+                  <p className="text-yellow-400 text-xs mt-2">
+                    ⚠️ Obligatorio adjuntar imagen o PDF para gastos mayores a S/ 500.
+                  </p>
+                )}
               </div>
 
               {/* Descripción */}
