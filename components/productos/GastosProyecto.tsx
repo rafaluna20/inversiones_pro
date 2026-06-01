@@ -28,6 +28,7 @@ interface GastosProyectoProps {
   proyectoId: string;
   usuarioId?: string;
   esCreadorOSocio?: boolean;
+  isLiquidado?: boolean;
 }
 
 // Mapeo de categorías a nombres legibles y colores
@@ -50,7 +51,7 @@ const ESTADOS_GASTO = {
   rechazado: { nombre: 'Rechazado', color: 'bg-red-500/20 text-red-300', icon: '❌' },
 };
 
-export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio = false }: GastosProyectoProps) {
+export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio = false, isLiquidado = false }: GastosProyectoProps) {
   const {
     gastos,
     loading,
@@ -251,6 +252,11 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
             </h3>
             <p className="text-gray-400 mt-1">
               {gastosFiltrados.length} gasto{gastosFiltrados.length !== 1 ? 's' : ''} registrado{gastosFiltrados.length !== 1 ? 's' : ''}
+              {isLiquidado && (
+                <span className="ml-3 px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-md text-xs font-semibold">
+                  Bloqueado (Liquidado)
+                </span>
+              )}
             </p>
           </div>
 
@@ -264,7 +270,7 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
             </div>
 
             {/* Botón agregar */}
-            {tienePermisos && (
+            {tienePermisos && !isLiquidado && (
               <button
                 onClick={() => {
                   setGastoEditando(null);
@@ -359,7 +365,7 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
             <div className="text-center py-20">
                 <FileCheck className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                 <p className="text-gray-400 text-lg">No hay gastos registrados</p>
-              {tienePermisos && (
+              {tienePermisos && !isLiquidado && (
                 <button
                   onClick={() => setMostrarModal(true)}
                   className="mt-4 text-emerald-400 hover:text-emerald-300 text-sm"
@@ -380,7 +386,7 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
                     <th className="px-6 py-4 text-right">Monto</th>
                     <th className="px-6 py-4">Estado</th>
                     <th className="px-6 py-4">Comprobante</th>
-                    {tienePermisos && <th className="px-6 py-4 text-right">Acciones</th>}
+                    {tienePermisos && !isLiquidado && <th className="px-6 py-4 text-right">Acciones</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -431,7 +437,7 @@ export default function GastosProyecto({ proyectoId, usuarioId, esCreadorOSocio 
                             <span className="text-gray-500">-</span>
                           )}
                         </td>
-                        {tienePermisos && (
+                        {tienePermisos && !isLiquidado && (
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <button

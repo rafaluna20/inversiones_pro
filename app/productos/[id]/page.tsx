@@ -811,6 +811,7 @@ export default function ProductoDetallesPage() {
                         proyectoId={producto.id}
                         usuarioId={usuario?.uid}
                         esCreadorOSocio={esCreador || esSocio}
+                        isLiquidado={!producto.estado}
                       />
                     ),
                   }] : []),
