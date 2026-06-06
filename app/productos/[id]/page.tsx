@@ -734,12 +734,12 @@ export default function ProductoDetallesPage() {
                       <InvestorList
                         inversores={inversores}
                         currentUserId={usuario?.uid}
-                        onEdit={(inversor) => {
+                        onEdit={producto.estado ? (inversor) => {
                           setEditingInvestor(inversor);
                           setIsEditingInvestment(true);
                           setShowInvestModal(true);
-                        }}
-                        onDelete={handleDeleteInvestment}
+                        } : undefined}
+                        onDelete={producto.estado ? handleDeleteInvestment : undefined}
                         totalCubos={totalCubos}
                         precio={producto.precio}
                       />
