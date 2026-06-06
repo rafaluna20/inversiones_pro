@@ -269,7 +269,21 @@ export default function MapaPage() {
               proyectosFiltrados.map((p) => {
                 const estaLiquidado = p.estado === false || p.distribucionEjecutada === true;
                 const cfg = CATEGORIAS_CONFIG[p.categoria] || CATEGORIAS_CONFIG.terreno;
-                const capital = p.monto || (typeof p.precio === 'number' ? p.precio : 0);
+                
+                // Cálculos financieros en tiempo real
+                const capital = typeof p.precio === 'number' ? p.precio : 0;
+                const montoVenta = p.monto || capital;
+                const totalGastos = (p as any).totalGastos || 0;
+                const costoTotal = (p as any).costoTotalProyecto || (capital + totalGastos);
+                
+                let roiRealMostrar = p.roiReal;
+                if (estaLiquidado) {
+                  const gananciaNeta = montoVenta - costoTotal;
+                  roiRealMostrar = costoTotal > 0 ? (gananciaNeta / costoTotal) * 100 : 0;
+                } else if (!estaLiquidado && totalGastos > 0) {
+                  roiRealMostrar = undefined;
+                }
+
                 const imagen = getImagen(p);
                 const isSelected = seleccionado?.id === p.id;
 
@@ -308,8 +322,8 @@ export default function MapaPage() {
                         {capital > 0 && (
                           <p className="text-emerald-400 text-xs font-mono font-semibold mt-0.5">{formatSoles(capital)}</p>
                         )}
-                        {p.roiReal !== undefined && p.roiReal !== null && (
-                          <p className="text-blue-400 text-xs">ROI: {p.roiReal > 0 ? '+' : ''}{p.roiReal.toFixed(2)}%</p>
+                        {roiRealMostrar !== undefined && roiRealMostrar !== null && (
+                          <p className="text-blue-400 text-xs">ROI: {roiRealMostrar > 0 ? '+' : ''}{roiRealMostrar.toFixed(2)}%</p>
                         )}
                       </div>
                     </div>

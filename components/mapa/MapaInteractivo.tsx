@@ -155,7 +155,27 @@ export default function MapaInteractivo({ proyectos, seleccionado, onSeleccionar
 
           const estaLiquidado = p.estado === false || p.distribucionEjecutada === true;
           const isSelected = seleccionado?.id === p.id;
-          const capital = p.monto || (typeof p.precio === 'number' ? p.precio : 0);
+          
+          // Cálculos financieros en tiempo real (como en ProjectClosureReport)
+          const capital = typeof p.precio === 'number' ? p.precio : 0;
+          const montoVenta = p.monto || capital;
+          const totalGastos = (p as any).totalGastos || 0;
+          const costoTotal = (p as any).costoTotalProyecto || (capital + totalGastos);
+          
+          let gananciaNetaMostrar = p.gananciaNeta;
+          let roiRealMostrar = p.roiReal;
+
+          // Si está liquidado, recalculamos en vivo para evitar datos cacheados negativos
+          if (estaLiquidado) {
+            gananciaNetaMostrar = montoVenta - costoTotal;
+            roiRealMostrar = costoTotal > 0 ? (gananciaNetaMostrar / costoTotal) * 100 : 0;
+          } else if (!estaLiquidado && totalGastos > 0) {
+             // Si no está liquidado, no mostramos ROI negativo por los gastos, a menos que sea informativo.
+             // Ocultaremos estas métricas si no está liquidado
+             gananciaNetaMostrar = undefined;
+             roiRealMostrar = undefined;
+          }
+
           const imagen = getImagen(p);
 
           const icono = isSelected ? iconoSeleccionado : estaLiquidado ? iconoLiquidado : iconoActivo;
@@ -229,19 +249,19 @@ export default function MapaInteractivo({ proyectos, seleccionado, onSeleccionar
                           <p style={{ color: '#34d399', fontFamily: 'monospace', fontWeight: 700, fontSize: 11 }}>{formatSoles(capital)}</p>
                         </div>
                       )}
-                      {p.roiReal !== undefined && p.roiReal !== null && (
+                      {roiRealMostrar !== undefined && roiRealMostrar !== null && (
                         <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '8px 10px' }}>
                           <p style={{ color: 'rgb(100,116,139)', fontSize: 9, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 1 }}>ROI Real</p>
-                          <p style={{ color: p.roiReal >= 0 ? '#60a5fa' : '#f87171', fontFamily: 'monospace', fontWeight: 700, fontSize: 11 }}>
-                            {p.roiReal > 0 ? '+' : ''}{p.roiReal.toFixed(2)}%
+                          <p style={{ color: roiRealMostrar >= 0 ? '#60a5fa' : '#f87171', fontFamily: 'monospace', fontWeight: 700, fontSize: 11 }}>
+                            {roiRealMostrar > 0 ? '+' : ''}{roiRealMostrar.toFixed(2)}%
                           </p>
                         </div>
                       )}
-                      {p.gananciaNeta !== undefined && p.gananciaNeta !== null && (
+                      {gananciaNetaMostrar !== undefined && gananciaNetaMostrar !== null && (
                         <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '8px 10px' }}>
                           <p style={{ color: 'rgb(100,116,139)', fontSize: 9, marginBottom: 2, textTransform: 'uppercase', letterSpacing: 1 }}>Gan. Neta</p>
-                          <p style={{ color: p.gananciaNeta >= 0 ? '#34d399' : '#f87171', fontFamily: 'monospace', fontWeight: 700, fontSize: 11 }}>
-                            {p.gananciaNeta >= 0 ? '+' : ''}{formatSoles(p.gananciaNeta)}
+                          <p style={{ color: gananciaNetaMostrar >= 0 ? '#34d399' : '#f87171', fontFamily: 'monospace', fontWeight: 700, fontSize: 11 }}>
+                            {gananciaNetaMostrar >= 0 ? '+' : ''}{formatSoles(gananciaNetaMostrar)}
                           </p>
                         </div>
                       )}
