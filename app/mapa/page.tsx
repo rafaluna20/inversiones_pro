@@ -137,8 +137,10 @@ export default function MapaPage() {
   }, []);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#020617' }}>
-
+    <div 
+      className="-m-4 lg:-m-8 relative z-0 overflow-hidden" 
+      style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 5rem - 2px)', background: '#020617' }}
+    >
       {/* ── Header ── */}
       <div style={{ flexShrink: 0, background: 'rgba(15,23,42,0.95)', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '12px 20px', zIndex: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
