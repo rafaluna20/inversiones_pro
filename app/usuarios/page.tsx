@@ -187,51 +187,77 @@ export default function UsuariosPage() {
                   <Link
                     key={usuario.id}
                     href={`/usuarios/${usuario.id}`}
-                    className="group relative bg-slate-900/40 backdrop-blur-md border border-white/10 rounded-3xl p-6 hover:bg-slate-800/80 hover:border-blue-500/30 transition-all duration-300 hover:-translate-y-1 shadow-lg hover:shadow-blue-500/10 flex flex-col"
+                    className="group relative bg-slate-900/50 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden hover:bg-slate-800/80 hover:border-blue-500/40 transition-all duration-500 hover:-translate-y-1.5 shadow-xl hover:shadow-blue-500/20 flex flex-col"
                   >
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-t-3xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    {/* Cover Pattern/Gradient */}
+                    <div className="h-24 w-full bg-slate-800 relative overflow-hidden">
+                      {/* Fondo decorativo sutil */}
+                      <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-500 via-transparent to-transparent"></div>
+                      <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] mix-blend-overlay"></div>
+                      
+                      {/* Hover highlight line */}
+                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                    </div>
 
-                    <div className="text-center relative z-10 flex-1">
-                      <div className="relative inline-block mb-4">
-                        <img
-                          src={usuario.photoURL || '/static/img/imagenPerfil.png'}
-                          alt={usuario.nombre || 'Usuario'}
-                          className="w-24 h-24 rounded-full object-cover border-4 border-slate-800 group-hover:border-blue-500/50 transition-colors shadow-xl"
-                        />
-                        {usuario.verificado && (
-                          <div className="absolute bottom-0 right-0 bg-blue-500 text-white p-1.5 rounded-full border-2 border-slate-900 shadow-sm" title="Inversor Verificado">
-                            <FaCheckCircle className="w-3 h-3" />
+                    {/* Content */}
+                    <div className="px-6 pb-6 relative flex-1 flex flex-col">
+                      {/* Avatar Overlapping */}
+                      <div className="relative -mt-10 mb-3 flex justify-between items-end">
+                        <div className="relative">
+                          <div className="p-1 bg-slate-950 rounded-full inline-block">
+                            <img
+                              src={usuario.photoURL || '/static/img/imagenPerfil.png'}
+                              alt={usuario.nombre || 'Usuario'}
+                              className="w-20 h-20 rounded-full object-cover border border-slate-700/50 group-hover:border-blue-400/50 transition-colors bg-slate-800"
+                            />
                           </div>
+                          {usuario.verificado && (
+                            <div className="absolute bottom-1 right-1 bg-blue-500 text-white p-1 rounded-full border-2 border-slate-950 shadow-md" title="Inversor Verificado">
+                              <FaCheckCircle className="w-3.5 h-3.5" />
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Pequeña insignia de gestor o rol (opcional, placeholder) */}
+                        {usuario.rol === 'gestor' && (
+                          <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider mb-2">
+                            Gestor
+                          </span>
                         )}
                       </div>
 
-                      <h3 className="text-lg font-bold text-white mb-1 group-hover:text-blue-400 transition-colors truncate">
-                        {usuario.nombre || 'Inversor Anónimo'}
-                      </h3>
-
-                      <div className="flex items-center justify-center gap-1.5 text-sm text-slate-400 mb-6">
-                        <FaMapMarkerAlt className="text-xs text-slate-500" />
-                        <span className="truncate max-w-[150px]">{usuario.departamento || 'No especificada'}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-between items-center pt-4 border-t border-white/10 mt-auto">
-                      <div className="flex flex-col items-center gap-1 w-1/2">
-                        <div className="flex items-center gap-1.5 text-red-400 font-bold text-lg">
-                          <FaHeart className="text-sm" />
-                          <span>{usuario.like || 0}</span>
+                      {/* Info */}
+                      <div className="mb-5">
+                        <h3 className="text-xl font-bold text-white group-hover:text-blue-400 transition-colors truncate">
+                          {usuario.nombre || 'Inversor Anónimo'}
+                        </h3>
+                        <div className="flex items-center gap-1.5 text-sm text-slate-400 mt-1">
+                          <FaMapMarkerAlt className="text-blue-500/70" />
+                          <span className="truncate">{usuario.departamento || 'Ubicación no especificada'}</span>
                         </div>
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Reputación</span>
                       </div>
 
-                      <div className="w-px h-8 bg-white/10"></div>
-
-                      <div className="flex flex-col items-center gap-1 w-1/2">
-                        <div className="flex items-center gap-1.5 text-emerald-400 font-bold text-lg">
-                          <FaChartLine className="text-sm" />
-                          <span>{usuario.inversionesCompletadas || 0}</span>
+                      {/* Metrics Box */}
+                      <div className="mt-auto grid grid-cols-2 gap-3">
+                        <div className="bg-slate-950/50 rounded-2xl p-3 border border-white/5 flex flex-col justify-center group-hover:border-white/10 transition-colors">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-6 h-6 rounded-full bg-red-500/10 flex items-center justify-center">
+                              <FaHeart className="text-red-400 text-xs" />
+                            </div>
+                            <span className="text-lg font-bold text-white">{usuario.like || 0}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider ml-1">Reputación</span>
                         </div>
-                        <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Inversiones</span>
+                        
+                        <div className="bg-slate-950/50 rounded-2xl p-3 border border-white/5 flex flex-col justify-center group-hover:border-white/10 transition-colors">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-6 h-6 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                              <FaChartLine className="text-emerald-400 text-xs" />
+                            </div>
+                            <span className="text-lg font-bold text-white">{usuario.inversionesCompletadas || 0}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 uppercase font-semibold tracking-wider ml-1">Inversiones</span>
+                        </div>
                       </div>
                     </div>
                   </Link>
