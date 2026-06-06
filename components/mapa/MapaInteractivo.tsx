@@ -91,7 +91,20 @@ function FlyToController({ seleccionado }: { seleccionado: ProyectoMapa | null }
     if (!seleccionado) return;
     const coords = getCoordenadas(seleccionado);
     if (!coords) return;
-    map.flyTo([coords.lat, coords.lng], 16, { duration: 1.2 });
+
+    const targetZoom = 16;
+    // Proyectar las coordenadas a píxeles para el nivel de zoom objetivo
+    const point = map.project([coords.lat, coords.lng], targetZoom);
+    
+    // Restar a Y para que el centro del mapa esté más arriba (Y crece hacia abajo).
+    // Esto hace que el pin quede en la parte centro-inferior de la pantalla,
+    // dando espacio perfecto para la tarjeta modal.
+    point.y -= 180; 
+    
+    // Desproyectar de vuelta a coordenadas geográficas
+    const newCenter = map.unproject(point, targetZoom);
+    
+    map.flyTo(newCenter, targetZoom, { duration: 1.2 });
   }, [seleccionado, map]);
 
   return null;
