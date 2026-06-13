@@ -85,10 +85,17 @@ export default function MisInversionesPage() {
         let gananciaReal = 0;
         let roiReal: number | undefined = undefined;
         if (producto.distribucionEjecutada || producto.estado === false) {
-          const comision = Number(producto.comisionGestor || 10);
-          const utilidad = Number(producto.utilidadNeta || (capitalTotal * 0.15));
-          const poolSocios = utilidad * (1 - comision / 100);
-          gananciaReal = poolSocios * (cubos / 100);
+          // El 'monto' actualizado en la DB contiene el 'valorVenta' (Capital + Plusvalía) al momento de liquidar
+          const valorVentaTotal = Number(producto.monto || producto.precio || 0);
+          const capitalOriginal = Number(producto.precio || 0);
+          
+          // La distribución se hace proporcional al total de cubos vendidos realmente
+          const totalCubosVendidos = producto.inversores?.reduce((sum: number, inv: any) => sum + Number(inv.cubos || 0), 0) || 100;
+          const porcentajeParticipacion = totalCubosVendidos > 0 ? (cubos / totalCubosVendidos) : 0;
+          
+          const gananciaTotalProyecto = valorVentaTotal - capitalOriginal;
+          
+          gananciaReal = gananciaTotalProyecto * porcentajeParticipacion;
           roiReal = montoInvertido > 0 ? (gananciaReal / montoInvertido) * 100 : 0;
         }
 
