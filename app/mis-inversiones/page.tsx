@@ -93,7 +93,8 @@ export default function MisInversionesPage() {
           const totalCubosVendidos = producto.inversores?.reduce((sum: number, inv: any) => sum + Number(inv.cubos || 0), 0) || 100;
           const porcentajeParticipacion = totalCubosVendidos > 0 ? (cubos / totalCubosVendidos) : 0;
           
-          const gananciaTotalProyecto = valorVentaTotal - capitalOriginal;
+          const gastosTotales = Number(producto.totalGastos || 0);
+          const gananciaTotalProyecto = (valorVentaTotal - capitalOriginal) - gastosTotales;
           
           gananciaReal = gananciaTotalProyecto * porcentajeParticipacion;
           roiReal = montoInvertido > 0 ? (gananciaReal / montoInvertido) * 100 : 0;
