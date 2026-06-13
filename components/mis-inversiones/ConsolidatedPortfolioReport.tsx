@@ -363,7 +363,7 @@ export default function ConsolidatedPortfolioReport({ usuario, inversiones, proy
           <div class="signature-title">Firma del Inversor Corporativo<br/>Representante Autorizado</div>
         </div>
         <div class="signature-line">
-          <strong style="color: #2563eb;">InversionesPro S.A.</strong>
+          <strong style="color: #2563eb;">MiHome S.A.C InversionesPRO</strong>
           <div class="signature-title">Firma y Sello Oficial<br/>Oficial de Cumplimiento y Control</div>
         </div>
       </div>

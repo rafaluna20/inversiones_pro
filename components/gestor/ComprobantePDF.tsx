@@ -173,7 +173,7 @@ export default function ComprobantePDF({ distribucion, socioUid, nombreSocio }: 
 
   <div class="footer">
     <span>COMPROBANTE OFICIAL DE DISTRIBUCIÓN — CONFIDENCIAL</span>
-    <span>InversionesPro S.A. — Documento generado por sistema</span>
+    <span>MiHome S.A.C InversionesPRO - Documento generado por sistema</span>
   </div>
 </div>
 <script>window.onload=function(){setTimeout(function(){window.print();},300);}<\/script>
