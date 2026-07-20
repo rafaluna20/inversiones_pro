@@ -123,7 +123,7 @@ export default function Testimonials() {
 
                             {/* Texto del testimonio */}
                             <p className="text-slate-300 leading-relaxed mb-6 relative z-10">
-                                "{testimonio.texto}"
+                                &quot;{testimonio.texto}&quot;
                             </p>
 
                             {/* Footer con proyecto */}

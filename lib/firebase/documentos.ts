@@ -30,6 +30,7 @@ import {
 } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase/config';
 import type { Documento, TipoDocumento, Producto, Inversion } from '@/types';
+import { devLog } from '@/lib/utils/devLog';
 
 // ============================================
 // INTERFACES
@@ -82,10 +83,10 @@ export async function subirDocumentoLegal(
   usuarioId: string
 ): Promise<{ id: string; url: string }> {
   try {
-    console.log('📄 Subiendo documento legal...');
-    console.log(`   Tipo: ${form.tipo}`);
-    console.log(`   Archivo: ${form.archivo.name}`);
-    console.log(`   Tamaño: ${(form.archivo.size / 1024 / 1024).toFixed(2)} MB`);
+    devLog('📄 Subiendo documento legal...');
+    devLog(`   Tipo: ${form.tipo}`);
+    devLog(`   Archivo: ${form.archivo.name}`);
+    devLog(`   Tamaño: ${(form.archivo.size / 1024 / 1024).toFixed(2)} MB`);
 
     // 1. Validar tamaño (máximo 10MB)
     const MAX_SIZE = 10 * 1024 * 1024; // 10MB
@@ -94,7 +95,7 @@ export async function subirDocumentoLegal(
     }
 
     // 2. Calcular hash para verificación de integridad
-    console.log('   Calculando hash SHA-256...');
+    devLog('   Calculando hash SHA-256...');
     const hash = await calculateFileHash(form.archivo);
 
     // 3. Subir a Firebase Storage
@@ -104,7 +105,7 @@ export async function subirDocumentoLegal(
 
     const storageRef = ref(storage, storagePath);
 
-    console.log('   Subiendo a Firebase Storage...');
+    devLog('   Subiendo a Firebase Storage...');
     const snapshot = await uploadBytes(storageRef, form.archivo, {
       contentType: form.archivo.type,
       customMetadata: {
@@ -116,7 +117,7 @@ export async function subirDocumentoLegal(
     });
 
     const url = await getDownloadURL(snapshot.ref);
-    console.log('   ✅ Archivo subido exitosamente');
+    devLog('   ✅ Archivo subido exitosamente');
 
     // 4. Registrar en Firestore
     const docRef = await addDoc(collection(db, 'documentos'), {
@@ -143,8 +144,8 @@ export async function subirDocumentoLegal(
       tags: form.tags || [form.tipo, form.proyectoId]
     });
 
-    console.log('   ✅ Documento registrado en Firestore');
-    console.log(`   ID: ${docRef.id}`);
+    devLog('   ✅ Documento registrado en Firestore');
+    devLog(`   ID: ${docRef.id}`);
 
     return {
       id: docRef.id,
@@ -266,7 +267,7 @@ export async function verificarIntegridadDocumento(
     // Comparar
     const integro = hashCalculado === documento.archivo.hash;
 
-    console.log(integro ? '✅ Documento íntegro' : '❌ Documento alterado');
+    devLog(integro ? '✅ Documento íntegro' : '❌ Documento alterado');
 
     return integro;
 
@@ -308,7 +309,7 @@ export async function eliminarDocumento(
       fechaActualizacion: Date.now()
     });
 
-    console.log('✅ Documento eliminado (marcado como no actual)');
+    devLog('✅ Documento eliminado (marcado como no actual)');
 
   } catch (error) {
     console.error('Error eliminando documento:', error);
@@ -329,7 +330,7 @@ export async function generarContratoPDF(
   inversion: Inversion
 ): Promise<string> {
   try {
-    console.log('📄 Generando contrato PDF...');
+    devLog('📄 Generando contrato PDF...');
 
     // Importar jsPDF dinámicamente
     const { default: jsPDF } = await import('jspdf');
@@ -447,7 +448,7 @@ export async function generarContratoPDF(
       inversion.usuarioId
     );
 
-    console.log('✅ Contrato PDF generado y subido');
+    devLog('✅ Contrato PDF generado y subido');
 
     return resultado.url;
 
@@ -488,7 +489,7 @@ export async function autorizarUsuarioDocumento(
         fechaActualizacion: Date.now()
       });
 
-      console.log(`✅ Usuario ${usuarioId} autorizado para documento ${documentoId}`);
+      devLog(`✅ Usuario ${usuarioId} autorizado para documento ${documentoId}`);
     }
 
   } catch (error) {

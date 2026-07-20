@@ -23,16 +23,64 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { calcularDistribucion } from '@/lib/distribucion';
+import {
+  Rol,
+  Permiso,
+  tienePermiso,
+  type UsuarioRBAC,
+} from '@/lib/security/rbac';
 import type { Inversion, Distribucion } from '@/types';
 
-/** Genera hash SHA-256 en el servidor usando Node.js crypto */
-async function generarHashSHA256(texto: string): Promise<string> {
-  try {
-    const { createHash } = await import('crypto');
-    return createHash('sha256').update(texto, 'utf8').digest('hex');
-  } catch {
-    return 'SHA256-SERVER-BYPASS';
+/**
+ * Construye un UsuarioRBAC a partir del documento de Firestore del ejecutor.
+ *
+ * El modelo de datos aún no persiste roles explícitos en todos los usuarios,
+ * por lo que:
+ *  - se leen `roles` (array) o `rol` (string) si existen en el documento, y
+ *  - si el usuario es el gestor del proyecto (`esGestorDelProyecto`), se le
+ *    concede el rol GESTOR para este recurso (compatibilidad con el modelo
+ *    actual basado en `gestorId`).
+ */
+function construirUsuarioRBAC(
+  uid: string,
+  data: Record<string, any> | undefined,
+  esGestorDelProyecto: boolean
+): UsuarioRBAC {
+  const roles = new Set<Rol>();
+
+  if (Array.isArray(data?.roles)) {
+    data!.roles.forEach((r: string) => {
+      if (Object.values(Rol).includes(r as Rol)) roles.add(r as Rol);
+    });
   }
+  if (typeof data?.rol === 'string' && Object.values(Rol).includes(data.rol as Rol)) {
+    roles.add(data.rol as Rol);
+  }
+  if (esGestorDelProyecto) roles.add(Rol.GESTOR);
+  if (roles.size === 0) roles.add(Rol.USUARIO);
+
+  return {
+    id: uid,
+    email: data?.email || '',
+    roles: Array.from(roles),
+    permisosAdicionales: data?.permisosAdicionales,
+    permisosRevocados: data?.permisosRevocados,
+  };
+}
+
+/**
+ * Genera hash SHA-256 en el servidor usando el módulo `crypto` de Node.
+ *
+ * Este hash es lo que hace "auditable e inmutable" al documento de
+ * distribución: si el cálculo del hash fallara y la función devolviera un
+ * valor de reemplazo en silencio, el documento quedaría persistido con una
+ * garantía criptográfica falsa. Por eso aquí NO se atrapa el error — debe
+ * propagarse y abortar la liquidación completa (ver el try/catch de
+ * `ejecutarDistribucionAction`, que ya maneja este caso).
+ */
+async function generarHashSHA256(texto: string): Promise<string> {
+  const { createHash } = await import('crypto');
+  return createHash('sha256').update(texto, 'utf8').digest('hex');
 }
 
 export interface EjecutarDistribucionResult {
@@ -67,7 +115,17 @@ export async function ejecutarDistribucionAction(
 
     const proyecto = proyectoSnap.data();
 
-    if (proyecto.gestorId !== gestorUid) {
+    // 1a. Autorización RBAC: el ejecutor debe poseer el permiso DISTRIBUIR_GANANCIAS.
+    //     Se combina la propiedad del proyecto (gestorId) con los roles del usuario.
+    const esGestorDelProyecto = proyecto.gestorId === gestorUid;
+    const usuarioSnap = await getDoc(doc(db, 'usuarios', gestorUid));
+    const ejecutor = construirUsuarioRBAC(
+      gestorUid,
+      usuarioSnap.exists() ? usuarioSnap.data() : undefined,
+      esGestorDelProyecto
+    );
+
+    if (!tienePermiso(ejecutor, Permiso.DISTRIBUIR_GANANCIAS)) {
       return { ok: false, mensaje: 'No tienes autorización para liquidar este proyecto.' };
     }
 

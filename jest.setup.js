@@ -30,25 +30,6 @@ jest.mock('./lib/firebase/config', () => ({
   },
 }));
 
-// Mock Redis
-jest.mock('./lib/security/rate-limiter', () => ({
-  redisClient: {
-    get: jest.fn(),
-    setEx: jest.fn(),
-    del: jest.fn(),
-    keys: jest.fn(),
-    info: jest.fn(),
-    dbSize: jest.fn(),
-    flushDb: jest.fn(),
-    connect: jest.fn(),
-    quit: jest.fn(),
-    on: jest.fn(),
-  },
-  rateLimiterGeneral: jest.fn((req, res, next) => next()),
-  rateLimiterEstricto: jest.fn((req, res, next) => next()),
-  rateLimiterAuth: jest.fn((req, res, next) => next()),
-}));
-
 // Mock Winston Logger
 jest.mock('./lib/performance/logger', () => ({
   logger: {
@@ -82,9 +63,6 @@ jest.mock('next/router', () => ({
 }));
 
 // Environment variables para testing
-process.env.ENCRYPTION_KEY = 'test-encryption-key-32-bytes-long';
-process.env.ENCRYPTION_SALT = 'test-salt';
-process.env.REDIS_URL = 'redis://localhost:6379';
 process.env.NODE_ENV = 'test';
 
 // Global test timeout (10 segundos)

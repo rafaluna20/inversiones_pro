@@ -6,6 +6,7 @@
 import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { recalcularTotalesGastos } from '@/lib/firebase/gastos';
+import { devLog } from '@/lib/utils/devLog';
 
 interface ResultadoVerificacion {
   proyectoId: string;
@@ -104,17 +105,17 @@ export async function corregirInconsistencias(proyectoId: string): Promise<boole
     const verificacion = await verificarGastosProyecto(proyectoId);
     
     if (!verificacion.coincide) {
-      console.log(`🔧 Corrigiendo proyecto ${verificacion.proyectoNombre}...`);
-      console.log(`   Total calculado: S/ ${verificacion.totalCalculado.toFixed(2)}`);
-      console.log(`   Total guardado: S/ ${verificacion.totalGuardado.toFixed(2)}`);
-      console.log(`   Diferencia: S/ ${verificacion.diferencia.toFixed(2)}`);
+      devLog(`🔧 Corrigiendo proyecto ${verificacion.proyectoNombre}...`);
+      devLog(`   Total calculado: S/ ${verificacion.totalCalculado.toFixed(2)}`);
+      devLog(`   Total guardado: S/ ${verificacion.totalGuardado.toFixed(2)}`);
+      devLog(`   Diferencia: S/ ${verificacion.diferencia.toFixed(2)}`);
       
       await recalcularTotalesGastos(proyectoId);
       
-      console.log(`✅ Proyecto ${verificacion.proyectoNombre} corregido`);
+      devLog(`✅ Proyecto ${verificacion.proyectoNombre} corregido`);
       return true;
     } else {
-      console.log(`✓ Proyecto ${verificacion.proyectoNombre} está correcto`);
+      devLog(`✓ Proyecto ${verificacion.proyectoNombre} está correcto`);
       return false;
     }
   } catch (error) {
@@ -128,32 +129,32 @@ export async function corregirInconsistencias(proyectoId: string): Promise<boole
  * @param resultados Array de resultados de verificación
  */
 export function generarReporteVerificacion(resultados: ResultadoVerificacion[]): void {
-  console.log('\n📊 REPORTE DE VERIFICACIÓN DE GASTOS\n');
-  console.log('═'.repeat(80));
+  devLog('\n📊 REPORTE DE VERIFICACIÓN DE GASTOS\n');
+  devLog('═'.repeat(80));
   
   const proyectosConProblemas = resultados.filter(r => !r.coincide);
   const proyectosCorrectos = resultados.filter(r => r.coincide);
   
-  console.log(`\n✅ Proyectos correctos: ${proyectosCorrectos.length}`);
-  console.log(`⚠️  Proyectos con inconsistencias: ${proyectosConProblemas.length}`);
+  devLog(`\n✅ Proyectos correctos: ${proyectosCorrectos.length}`);
+  devLog(`⚠️  Proyectos con inconsistencias: ${proyectosConProblemas.length}`);
   
   if (proyectosConProblemas.length > 0) {
-    console.log('\n⚠️  PROYECTOS CON INCONSISTENCIAS:\n');
-    console.log('─'.repeat(80));
+    devLog('\n⚠️  PROYECTOS CON INCONSISTENCIAS:\n');
+    devLog('─'.repeat(80));
     
     proyectosConProblemas.forEach(p => {
-      console.log(`\nProyecto: ${p.proyectoNombre} (${p.proyectoId})`);
-      console.log(`  Gastos en subcolección: ${p.gastosEnSubcoleccion}`);
-      console.log(`  Gastos aprobados: ${p.gastosAprobados}`);
-      console.log(`  Total calculado: S/ ${p.totalCalculado.toFixed(2)}`);
-      console.log(`  Total guardado: S/ ${p.totalGuardado.toFixed(2)}`);
-      console.log(`  Diferencia: S/ ${p.diferencia.toFixed(2)} ❌`);
+      devLog(`\nProyecto: ${p.proyectoNombre} (${p.proyectoId})`);
+      devLog(`  Gastos en subcolección: ${p.gastosEnSubcoleccion}`);
+      devLog(`  Gastos aprobados: ${p.gastosAprobados}`);
+      devLog(`  Total calculado: S/ ${p.totalCalculado.toFixed(2)}`);
+      devLog(`  Total guardado: S/ ${p.totalGuardado.toFixed(2)}`);
+      devLog(`  Diferencia: S/ ${p.diferencia.toFixed(2)} ❌`);
     });
     
-    console.log('\n💡 Ejecuta corregirInconsistencias(proyectoId) para cada proyecto con problemas');
+    devLog('\n💡 Ejecuta corregirInconsistencias(proyectoId) para cada proyecto con problemas');
   }
   
-  console.log('\n' + '═'.repeat(80) + '\n');
+  devLog('\n' + '═'.repeat(80) + '\n');
 }
 
 /**
@@ -164,7 +165,7 @@ export function generarReporteVerificacion(resultados: ResultadoVerificacion[]):
  * await verificarYCorregirTodo();
  */
 export async function verificarYCorregirTodo(): Promise<void> {
-  console.log('🔍 Iniciando verificación de todos los proyectos...\n');
+  devLog('🔍 Iniciando verificación de todos los proyectos...\n');
   
   const resultados = await verificarTodosLosProyectos();
   generarReporteVerificacion(resultados);
@@ -172,17 +173,17 @@ export async function verificarYCorregirTodo(): Promise<void> {
   const proyectosConProblemas = resultados.filter(r => !r.coincide);
   
   if (proyectosConProblemas.length > 0) {
-    console.log('🔧 Corrigiendo inconsistencias automáticamente...\n');
+    devLog('🔧 Corrigiendo inconsistencias automáticamente...\n');
     
     for (const proyecto of proyectosConProblemas) {
       await corregirInconsistencias(proyecto.proyectoId);
     }
     
-    console.log('\n✅ Corrección completada. Verificando nuevamente...\n');
+    devLog('\n✅ Corrección completada. Verificando nuevamente...\n');
     
     const resultadosFinales = await verificarTodosLosProyectos();
     generarReporteVerificacion(resultadosFinales);
   } else {
-    console.log('✅ Todos los proyectos están correctos. No se requiere corrección.');
+    devLog('✅ Todos los proyectos están correctos. No se requiere corrección.');
   }
 }

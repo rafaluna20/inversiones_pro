@@ -1,0 +1,259 @@
+// ═══════════════════════════════════════════════════════════════════════
+// FIRESTORE SECURITY RULES — LISTAS PARA REVISAR Y DESPLEGAR
+// ═══════════════════════════════════════════════════════════════════════
+//
+// A diferencia de la versión anterior de este archivo (que era una
+// inferencia a partir del código), esta se escribió comparando línea por
+// línea contra las reglas REALMENTE desplegadas en producción, exportadas
+// el 2026-07-20 con `npx tsx scripts/exportarReglasProduccion.ts`
+// (ver firestore.rules.PRODUCCION-REAL.txt, gitignorado).
+//
+// ⚠️ LO QUE HAY DESPLEGADO HOY ES GRAVE: para usuarios, productos,
+// inversiones, distribuciones, gastos, y el journal del puente con Odoo
+// (plataforma_cargas / plataforma_retiros), la regla real es literalmente
+// `allow write: if request.auth != null` — CUALQUIER usuario autenticado
+// (una cuenta gratis, autoregistrada) puede escribir el saldo de CUALQUIER
+// OTRO usuario, editar el proyecto de otro creador, o reescribir un
+// documento de `distribuciones` que se supone es inmutable. No hay ningún
+// chequeo de dueño. Esto es explotable ahora mismo.
+//
+// ─────────────────────────────────────────────────────────────────────
+// CAMBIOS RESPECTO A LO DESPLEGADO HOY (resumen para revisar rápido)
+// ─────────────────────────────────────────────────────────────────────
+// - usuarios: antes CUALQUIERA podía escribir el doc de cualquiera. Ahora
+//   solo el propio dueño (o admin) puede escribir el suyo, y ni siquiera
+//   el dueño puede tocar roles/permisos/email.
+// - productos: la lectura pública se mantiene igual (allow read: if true).
+//   La escritura antes era "cualquier autenticado, cualquier proyecto".
+//   Ahora: el dueño/gestor tiene edición completa; cualquier otro usuario
+//   autenticado solo puede tocar votos/haVotado/comentarios (para no
+//   romper votar y comentar, que hoy cualquiera puede hacer).
+// - inversiones, distribuciones, plataforma_cargas, plataforma_retiros,
+//   gastos: antes "cualquier autenticado, cualquier documento". Ahora,
+//   scoped al dueño real o denegado del todo si debe ser server-only.
+// - catch-all: antes `if request.auth != null` para CUALQUIER colección no
+//   listada explícitamente. Ahora deniega todo por defecto.
+//
+// ─────────────────────────────────────────────────────────────────────
+// ANTES DE DESPLEGAR (`firebase deploy --only firestore:rules`)
+// ─────────────────────────────────────────────────────────────────────
+//   1. Pegar este archivo en Firebase Console → Firestore Database →
+//      Reglas → pestaña "Simulador de reglas" (Rules Playground) y probar
+//      ahí primero, sin desplegar, con casos reales: leer/escribir tu
+//      propio usuario, intentar escribir el de otro (debe fallar), votar
+//      un producto, editar un producto ajeno (debe fallar).
+//   2. Probar en la app real, en este orden, apenas despliegues:
+//      a. Recargar billetera (Validacion/acreditarDesdeBilletera.ts corre
+//         en el cliente — debería seguir funcionando, escribe su propio uid).
+//      b. Votar y comentar en un producto (debe seguir funcionando).
+//      c. Crear/editar un producto propio (debe seguir funcionando).
+//      d. Invertir/eliminar inversión/distribuir/depositar recaudado —
+//         estos ya NO dependen de estas reglas (corren con Admin SDK desde
+//         app/actions/inversion.ts), así que no deberían verse afectados.
+//      e. ⚠️ Retirar hacia la billetera bancaria (withdrawFromPlatformAction
+//         en app/actions/wallet.ts) — este server action llama a
+//         Validacion/retirarHaciaBilletera.ts, que usa el SDK CLIENTE de
+//         Firestore desde un contexto de servidor sin sesión persistente de
+//         Firebase Auth. Es probable que `request.auth` ya sea null ahí HOY
+//         (con o sin este cambio de reglas) — si es así, este flujo ya
+//         estaba fallando en producción antes de tocar nada. Probarlo
+//         explícitamente y, si falla, migrar wallet.ts a Admin SDK igual
+//         que se hizo con app/actions/inversion.ts (mismo patrón, ver
+//         lib/firebase/admin.ts). Mismo comentario aplica a
+//         app/actions/distribucion.ts (ejecutarDistribucionAction), que
+//         escribe `distribuciones` con el mismo patrón.
+//
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────────
+    // HELPERS
+    // ─────────────────────────────────────────────────────────────────
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/usuarios/$(uid)).data;
+    }
+
+    function myRoles() {
+      return signedIn() && ('roles' in userDoc(request.auth.uid))
+        ? userDoc(request.auth.uid).roles
+        : [];
+    }
+
+    function hasRole(role) {
+      return signedIn() && role in myRoles();
+    }
+
+    function isAdmin() {
+      return hasRole('admin') || hasRole('super_admin');
+    }
+
+    // "Gestor" en el sentido amplio usado por la app: admin, o gestor con
+    // rol explícito, o dueño del proyecto vía `gestorId`/`creador.id` (ver
+    // construirUsuarioRBAC en app/actions/distribucion.ts, que usa la misma
+    // combinación de señales).
+    function esGestorDelProyecto(proyectoId) {
+      let proyecto = get(/databases/$(database)/documents/productos/$(proyectoId)).data;
+      return isAdmin() || hasRole('gestor')
+        || (signedIn() && 'gestorId' in proyecto && proyecto.gestorId == request.auth.uid)
+        || (signedIn() && 'creador' in proyecto && proyecto.creador.id == request.auth.uid);
+    }
+
+    function camposNoModificados(campos) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny(campos) == false;
+    }
+
+    function soloEstosCampos(campos) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // USUARIOS
+    // ─────────────────────────────────────────────────────────────────
+    match /usuarios/{uid} {
+      allow read: if isSelf(uid) || isAdmin();
+
+      allow create: if isSelf(uid)
+        && request.resource.data.saldo == 0
+        && (request.resource.data.roles is list == false || request.resource.data.roles == ['usuario']);
+
+      // El dueño puede actualizar su propio doc (incluido `saldo`, que
+      // Validacion/acreditarDesdeBilletera.ts sigue escribiendo desde el
+      // cliente al recargar billetera) — pero nunca sus propios roles,
+      // permisos o email.
+      allow update: if (isSelf(uid) || isAdmin())
+        && camposNoModificados(['roles', 'permisosAdicionales', 'permisosRevocados', 'email']);
+
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // PRODUCTOS (proyectos de inversión)
+    // ─────────────────────────────────────────────────────────────────
+    match /productos/{proyectoId} {
+      // Igual que hoy: catálogo público, cualquiera puede leer.
+      allow read: if true;
+
+      allow create: if signedIn() && request.resource.data.creador.id == request.auth.uid;
+
+      // El dueño/gestor puede editar todo. Cualquier otro usuario
+      // autenticado SOLO puede tocar votos/haVotado/comentarios (votar y
+      // comentar) — no precio, no inversores, no estado, no nada financiero.
+      allow update: if esGestorDelProyecto(proyectoId)
+        || (signedIn() && soloEstosCampos(['votos', 'haVotado', 'comentarios']));
+
+      allow delete: if esGestorDelProyecto(proyectoId) || isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // INVERSIONES (colección separada del modelo bifásico — hoy sin
+    // ninguna pantalla conectada: registrarInversion()/aprobarInversion()
+    // en lib/firebase/proyectos-bifasicos.ts no tienen callers. Reglas
+    // estrictas desde ya para que, el día que se conecten, ya estén bien.)
+    // ─────────────────────────────────────────────────────────────────
+    match /inversiones/{inversionId} {
+      allow read: if signedIn() && (resource.data.usuarioId == request.auth.uid
+        || esGestorDelProyecto(resource.data.proyectoId));
+
+      allow create: if signedIn()
+        && request.resource.data.usuarioId == request.auth.uid
+        && request.resource.data.confirmada == false
+        && request.resource.data.gananciaReal == 0;
+
+      allow update: if esGestorDelProyecto(resource.data.proyectoId);
+
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    match /socios/{socioId} {
+      allow read: if signedIn() && (resource.data.usuarioId == request.auth.uid
+        || esGestorDelProyecto(resource.data.proyectoId));
+      allow write: if esGestorDelProyecto(resource.data.proyectoId)
+        || (request.resource.data.proyectoId is string && esGestorDelProyecto(request.resource.data.proyectoId));
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // DISTRIBUCIONES — documento "inmutable" firmado con hash SHA-256.
+    // Hoy CUALQUIER autenticado podía reescribirlo. Se deniega toda
+    // escritura de cliente; ver advertencia sobre ejecutarDistribucionAction
+    // en el encabezado del archivo (probar antes de confiar en esto).
+    // ─────────────────────────────────────────────────────────────────
+    match /distribuciones/{distribucionId} {
+      // Nota: el lenguaje de reglas de Firestore no tiene `.map()`/lambdas
+      // reales, así que no se puede filtrar `distribucionPorSocio` por
+      // usuarioId acá dentro. Cada socio ya ve su propio resultado
+      // (gananciaReal, roiReal) en su documento de `inversiones`, que sí
+      // tiene lectura por dueño — no hace falta duplicar el acceso acá.
+      allow read: if signedIn() && (resource.data.gestorId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // PUENTE ODOO ↔ FIREBASE (journal de idempotencia)
+    // ─────────────────────────────────────────────────────────────────
+    match /plataforma_cargas/{transactionId} {
+      allow read: if signedIn() && resource.data.firebase_uid == request.auth.uid || isAdmin();
+      allow create: if signedIn() && request.resource.data.firebase_uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /plataforma_retiros/{transactionId} {
+      allow read: if signedIn() && resource.data.firebase_uid == request.auth.uid || isAdmin();
+      allow create: if signedIn() && request.resource.data.firebase_uid == request.auth.uid;
+      allow update: if signedIn() && resource.data.firebase_uid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    match /reconciliation_reports/{reportId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // GASTOS — hoy CUALQUIER autenticado podía escribir cualquier gasto de
+    // cualquier proyecto. Se restringe a gestor/admin del proyecto. ⚠️ no
+    // se verificó a fondo lib/firebase/gastos.ts en esta sesión — si algún
+    // flujo permite que un inversor suba comprobantes directamente, esto
+    // lo bloquearía y hay que ajustar.
+    // ─────────────────────────────────────────────────────────────────
+    match /gastos/{gastoId} {
+      allow read: if signedIn();
+      allow write: if esGestorDelProyecto(resource.data.proyectoId)
+        || (request.resource.data.proyectoId is string && esGestorDelProyecto(request.resource.data.proyectoId));
+    }
+
+    match /hitos/{hitoId} {
+      allow read: if signedIn();
+      allow write: if esGestorDelProyecto(resource.data.proyectoId)
+        || (request.resource.data.proyectoId is string && esGestorDelProyecto(request.resource.data.proyectoId));
+    }
+
+    match /documentos/{documentoId} {
+      allow read: if signedIn();
+      allow write: if esGestorDelProyecto(resource.data.proyectoId)
+        || (request.resource.data.proyectoId is string && esGestorDelProyecto(request.resource.data.proyectoId));
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // DENEGAR TODO LO DEMÁS POR DEFECTO
+    // Hoy: `allow read, write: if request.auth != null` para cualquier
+    // colección no listada — cualquier cuenta autenticada podía leer/
+    // escribir CUALQUIER cosa en colecciones nuevas o no contempladas.
+    // ─────────────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

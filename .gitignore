@@ -37,6 +37,7 @@ scripts/serviceAccountKey.json
 scripts/app-invesiones-firebase-adminsdk-fbsvc-8f1623f8dd.json
 **/serviceAccountKey.json
 **/*firebase-adminsdk*.json
+firestore.rules.PRODUCCION-REAL.txt
 
 # vercel
 .vercel

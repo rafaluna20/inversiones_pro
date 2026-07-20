@@ -73,13 +73,16 @@ describe('RBAC Module', () => {
       expect(permisos).toContain(Permiso.VER_HITOS);
     });
 
-    test('admin debe tener casi todos los permisos', () => {
+    test('admin debe tener casi todos los permisos, pero NO MODIFICAR_CONFIGURACION (reservado a super_admin)', () => {
       const permisos = obtenerPermisosUsuario(admin);
-      
+
       expect(permisos).toContain(Permiso.APROBAR_INVERSION);
       expect(permisos).toContain(Permiso.ELIMINAR_PROYECTO);
       expect(permisos).toContain(Permiso.VER_USUARIOS);
-      expect(permisos).toContain(Permiso.MODIFICAR_CONFIGURACION);
+      // Privilegio mínimo intencional: tocar la configuración del sistema es
+      // la única acción reservada exclusivamente a SUPER_ADMIN (ver
+      // PERMISOS_POR_ROL en lib/security/rbac.ts).
+      expect(permisos).not.toContain(Permiso.MODIFICAR_CONFIGURACION);
     });
 
     test('super admin debe tener todos los permisos', () => {

@@ -24,6 +24,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import type { Producto, EtapaProyecto, Inversion, Socio, Hito } from '@/types';
+import { devLog } from '@/lib/utils/devLog';
 // import { crearTransaccionOdoo, confirmarTransaccionOdoo } from '@/lib/billetera-api';
 
 // ============================================
@@ -68,6 +69,22 @@ export interface RegistrarInversionForm {
   montoTotal: number;
   metodoPago: 'wallet' | 'transferencia';
 }
+
+/**
+ * `RegistrarInversionForm.tipoInversion` usa el vocabulario 'tierra'/'capital'
+ * (igual que `Inversion.tipoInversion` y `Socio.tipoSocio` en types/index.ts),
+ * pero `Producto.etapas` y el campo `Inversion.etapa` usan 'tierra'/
+ * 'construccion' (igual que lib/distribucion.ts, aprobarInversion() más
+ * abajo, y lib/resilience/reconciliation-logic.ts). Son la misma fase del
+ * proyecto con dos nombres distintos en dos partes del modelo de datos —
+ * sin este mapeo, indexar `etapas[tipoInversion]` con 'capital' devuelve
+ * `undefined` y revienta en tiempo de ejecución (esto es justo lo que
+ * `strict: true` de TypeScript detectó).
+ */
+const ETAPA_POR_TIPO_INVERSION: Record<RegistrarInversionForm['tipoInversion'], 'tierra' | 'construccion'> = {
+  tierra: 'tierra',
+  capital: 'construccion',
+};
 
 // ============================================
 // CREAR PROYECTO BIFÁSICO
@@ -190,7 +207,7 @@ export async function crearProyectoBifasico(
       updatedAt: Date.now()
     });
 
-    console.log('✅ Proyecto bifásico creado:', docRef.id);
+    devLog('✅ Proyecto bifásico creado:', docRef.id);
     return docRef.id;
 
   } catch (error) {
@@ -227,15 +244,18 @@ export async function registrarInversion(
     }
 
     // 3. Verificar disponibilidad de cubos
-    const etapa = proyecto.etapas![form.tipoInversion];
+    const etapaKey = ETAPA_POR_TIPO_INVERSION[form.tipoInversion];
+    const etapa = proyecto.etapas![etapaKey];
     if (etapa.cubos.disponibles < form.cubosDeseados) {
       throw new Error(`Solo hay ${etapa.cubos.disponibles} cubos disponibles`);
     }
 
     // 4. Crear transacción en Odoo Wallet
-    let transaccionOdoo;
+    let transaccionOdoo: { id?: string; reference?: string } | undefined;
     /*
-    TODO: Refactor to use Server Actions. The 'crearTransaccionOdoo' function is missing/deprecated.
+    NOTA: el pago de la inversión se realiza vía saldo de plataforma en Firebase
+    (restarSaldo en app/productos/[id]/page.tsx), no vía Odoo. No se requiere transacción Odoo aquí.
+    Confirmar el endpoint Odoo (ENDPOINT_PAGO_INVERSION) antes de activar el débito en producción.
     try {
       transaccionOdoo = await crearTransaccionOdoo({
         usuario_id: form.usuarioId,  // Se debe mapear Firebase UID → Odoo ID
@@ -260,7 +280,7 @@ export async function registrarInversion(
       proyectoId: form.proyectoId,
       usuarioId: form.usuarioId,
       tipoInversion: form.tipoInversion,
-      etapa: form.tipoInversion,
+      etapa: etapaKey,
       montoInvertido: form.montoTotal,
       cubosComprados: form.cubosDeseados,
       porcentajeParticipacion: form.cubosDeseados,
@@ -282,10 +302,10 @@ export async function registrarInversion(
       updatedAt: Date.now()
     });
 
-    console.log('✅ Inversión registrada:', inversionRef.id);
-    console.log('   Monto:', form.montoTotal);
-    console.log('   Cubos:', form.cubosDeseados);
-    console.log('   Odoo TX:', transaccionOdoo?.reference);
+    devLog('✅ Inversión registrada:', inversionRef.id);
+    devLog('   Monto:', form.montoTotal);
+    devLog('   Cubos:', form.cubosDeseados);
+    devLog('   Odoo TX:', transaccionOdoo?.reference);
 
     return inversionRef.id;
 
@@ -368,7 +388,7 @@ export async function aprobarInversion(inversionId: string): Promise<void> {
         activo: true,
         createdAt: Date.now()
       });
-      console.log('✅ Nuevo socio creado');
+      devLog('✅ Nuevo socio creado');
     } else {
       // Actualizar a socio mixto
       const socioRef = sociosSnap.docs[0].ref;
@@ -381,10 +401,10 @@ export async function aprobarInversion(inversionId: string): Promise<void> {
           : { valorCapitalProporcional: increment(inversion.montoInvertido) }
         )
       });
-      console.log('✅ Socio actualizado a MIXTO');
+      devLog('✅ Socio actualizado a MIXTO');
     }
 
-    console.log('✅ Inversión aprobada exitosamente');
+    devLog('✅ Inversión aprobada exitosamente');
 
   } catch (error) {
     console.error('❌ Error aprobando inversión:', error);

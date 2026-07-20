@@ -1,12 +1,88 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { checkRateLimit, obtenerIp, type RateLimitRule } from '@/lib/security/edge-rate-limit';
+
+/** Nombre de la cookie de sesión de billetera (definida en app/actions/auth.ts). */
+const COOKIE_NAME = 'billetera_session';
 
 /**
- * Middleware para manejar redirects de URLs antiguas y protección de rutas
+ * Rutas de movimiento de dinero que exigen sesión activa. El acceso también
+ * se permite si la ruta trae un `token` en el query string (flujo por enlace).
+ */
+const RUTAS_REQUIEREN_SESION = [
+  '/billetera/transferir',
+  '/billetera/retirar',
+  '/billetera/retirar-banco',
+  '/billetera/recargar',
+];
+
+/**
+ * Reglas de rate limiting por prefijo de ruta. Se aplican a mutaciones
+ * (solicitudes POST de Server Actions) para frenar ráfagas de abuso.
+ */
+const REGLAS_RATE_LIMIT: Array<{ prefijo: string; rule: RateLimitRule }> = [
+  { prefijo: '/billetera', rule: { limit: 15, windowMs: 60_000 } },
+  { prefijo: '/gestor', rule: { limit: 20, windowMs: 60_000 } },
+  { prefijo: '/productos/nuevo', rule: { limit: 10, windowMs: 60_000 } },
+  { prefijo: '/productos/editar', rule: { limit: 20, windowMs: 60_000 } },
+];
+
+/** Aplica cabeceras de seguridad básicas a cualquier respuesta que continúe. */
+function conCabecerasSeguridad(response: NextResponse): NextResponse {
+  response.headers.set('X-Content-Type-Options', 'nosniff');
+  response.headers.set('X-Frame-Options', 'DENY');
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  response.headers.set('X-DNS-Prefetch-Control', 'off');
+  return response;
+}
+
+/**
+ * Middleware para rate limiting, protección de rutas sensibles y redirects
+ * de URLs antiguas.
  */
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const searchParams = request.nextUrl.searchParams;
+
+  // ========================================
+  // RATE LIMITING (mutaciones vía Server Actions)
+  // ========================================
+  if (request.method === 'POST') {
+    const regla = REGLAS_RATE_LIMIT.find((r) => path.startsWith(r.prefijo));
+    if (regla) {
+      const ip = obtenerIp(request.headers);
+      const resultado = checkRateLimit(`${ip}:${regla.prefijo}`, regla.rule);
+      if (!resultado.allowed) {
+        const retryAfter = Math.max(1, Math.ceil((resultado.resetAt - Date.now()) / 1000));
+        return new NextResponse(
+          JSON.stringify({
+            error: 'Demasiadas solicitudes. Intenta nuevamente en unos segundos.',
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              'Retry-After': String(retryAfter),
+            },
+          }
+        );
+      }
+    }
+  }
+
+  // ========================================
+  // PROTECCIÓN DE RUTAS DE MOVIMIENTO DE DINERO
+  // ========================================
+  if (RUTAS_REQUIEREN_SESION.some((r) => path === r || path.startsWith(`${r}/`))) {
+    const tieneSesion = Boolean(request.cookies.get(COOKIE_NAME)?.value);
+    const tieneToken = Boolean(searchParams.get('token'));
+    if (!tieneSesion && !tieneToken) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.searchParams.set('redirect', path);
+      return NextResponse.redirect(url);
+    }
+  }
 
   // ========================================
   // REDIRECTS DE URLS ANTIGUAS A NUEVAS
@@ -33,20 +109,6 @@ export function middleware(request: NextRequest) {
   // ========================================
   // REDIRECTS DE RUTAS CON PARÁMETROS
   // ========================================
-
-  // /yapear/[id] → /billetera/yapear/[id]?token=xxx&tipo=transferencia
-  if (path.match(/^\/yapear\/[\w-]+$/)) {
-    const id = path.split('/')[2];
-    const token = searchParams.get('token') || '';
-    const tipo = searchParams.get('tipo') || 'transferencia';
-    
-    const url = request.nextUrl.clone();
-    url.pathname = `/billetera/yapear/${id}`;
-    url.searchParams.set('token', token);
-    url.searchParams.set('tipo', tipo);
-    
-    return NextResponse.redirect(url, 301);
-  }
 
   // /historial/[token] → /billetera/historial?token=xxx
   if (path.match(/^\/historial\/[\w.-]+$/)) {
@@ -120,8 +182,8 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url, 301);
   }
 
-  // Continuar con la request normalmente
-  return NextResponse.next();
+  // Continuar con la request normalmente (con cabeceras de seguridad)
+  return conCabecerasSeguridad(NextResponse.next());
 }
 
 /**

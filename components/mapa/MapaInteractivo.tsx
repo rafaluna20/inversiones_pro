@@ -16,11 +16,15 @@ import 'leaflet/dist/leaflet.css';
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface Coordenadas { lat: number; lng: number; }
 
-interface ProyectoMapa {
+export type CategoriaProducto =
+  | 'departamento' | 'terreno' | 'casa'
+  | 'oficina' | 'localComercial' | 'habilitacionUrbana';
+
+export interface ProyectoMapa {
   id: string;
   nombre: string;
   empresa: string;
-  categoria: string;
+  categoria: CategoriaProducto;
   estado: boolean;
   distribucionEjecutada?: boolean;
   coordenadas?: Coordenadas;

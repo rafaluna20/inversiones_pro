@@ -54,7 +54,7 @@ export default function BuscarPage() {
           </div>
           {q && (
             <p className="text-gray-400 text-lg">
-              Búsqueda: <span className="text-blue-400 font-semibold">"{q}"</span>
+              Búsqueda: <span className="text-blue-400 font-semibold">&quot;{q}&quot;</span>
               {' - '}
               <span className="text-white font-semibold">{resultados.length}</span> resultados encontrados
             </p>
@@ -82,7 +82,7 @@ export default function BuscarPage() {
         ) : (
           <div className="text-center py-20">
             <p className="text-gray-400 text-xl mb-2">
-              No se encontraron productos que coincidan con "{q}"
+              No se encontraron productos que coincidan con &quot;{q}&quot;
             </p>
             <p className="text-gray-500">
               Intenta con otros términos de búsqueda

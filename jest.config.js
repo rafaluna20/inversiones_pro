@@ -48,7 +48,7 @@ const customJestConfig = {
   ],
   
   // Coverage thresholds (objetivo: >80%)
-  coverageThresholds: {
+  coverageThreshold: {
     global: {
       branches: 70,
       functions: 70,
@@ -57,6 +57,11 @@ const customJestConfig = {
     },
   },
   
+  // Los tests de integración contra el emulador de Firestore corren aparte
+  // (ver jest.integration.config.js + `npm run test:emulator`): requieren el
+  // emulador (Java) corriendo y no deben bloquear un `npm test` normal.
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/__tests__/integration/'],
+
   // Transform ignore patterns
   transformIgnorePatterns: [
     '/node_modules/',

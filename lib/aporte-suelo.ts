@@ -20,6 +20,7 @@ import {
 import { db } from '@/lib/firebase/config';
 import type { Producto, Socio, Inversion } from '@/types';
 import { transferirDinero } from '@/lib/billetera-api';
+import { devLog } from '@/lib/utils/devLog';
 
 // ============================================
 // INTERFACES
@@ -121,7 +122,7 @@ export function calcularGananciaSocio(
     const gananciaTierra = (gananciaTotalProyecto * porcentajeProyecto) / 100;
     gananciaTotal += gananciaTierra;
 
-    console.log(`   Ganancia Tierra: ${gananciaTierra.toFixed(2)} (${porcentajeProyecto.toFixed(2)}% del proyecto)`);
+    devLog(`   Ganancia Tierra: ${gananciaTierra.toFixed(2)} (${porcentajeProyecto.toFixed(2)}% del proyecto)`);
   }
 
   // Calcular ganancia de aporte en Capital
@@ -141,7 +142,7 @@ export function calcularGananciaSocio(
     const gananciaCapital = (gananciaTotalProyecto * porcentajeProyecto) / 100;
     gananciaTotal += gananciaCapital;
 
-    console.log(`   Ganancia Capital: ${gananciaCapital.toFixed(2)} (${porcentajeProyecto.toFixed(2)}% del proyecto)`);
+    devLog(`   Ganancia Capital: ${gananciaCapital.toFixed(2)} (${porcentajeProyecto.toFixed(2)}% del proyecto)`);
   }
 
   return Number(gananciaTotal.toFixed(2));
@@ -166,9 +167,9 @@ export async function distribuirGananciasProyecto(
   precioVenta: number
 ): Promise<DistribucionGanancia[]> {
   try {
-    console.log('🎯 Iniciando distribución de ganancias...');
-    console.log(`   Proyecto: ${proyectoId}`);
-    console.log(`   Precio Venta: S/ ${precioVenta.toLocaleString()}`);
+    devLog('🎯 Iniciando distribución de ganancias...');
+    devLog(`   Proyecto: ${proyectoId}`);
+    devLog(`   Precio Venta: S/ ${precioVenta.toLocaleString()}`);
 
     // 1. Obtener proyecto
     const proyectoRef = doc(db, 'productos', proyectoId);
@@ -190,12 +191,12 @@ export async function distribuirGananciasProyecto(
 
     const aporteSuelo = calcularAporteSuelo(valorTierra, valorConstruccion);
 
-    console.log('\n📊 Aporte de Suelo:');
-    console.log(`   Valor Tierra: S/ ${valorTierra.toLocaleString()}`);
-    console.log(`   Valor Construcción: S/ ${valorConstruccion.toLocaleString()}`);
-    console.log(`   Valor Total: S/ ${aporteSuelo.valorTotal.toLocaleString()}`);
-    console.log(`   % Tierra: ${aporteSuelo.porcentajeTierra}%`);
-    console.log(`   % Capital: ${aporteSuelo.porcentajeCapital}%`);
+    devLog('\n📊 Aporte de Suelo:');
+    devLog(`   Valor Tierra: S/ ${valorTierra.toLocaleString()}`);
+    devLog(`   Valor Construcción: S/ ${valorConstruccion.toLocaleString()}`);
+    devLog(`   Valor Total: S/ ${aporteSuelo.valorTotal.toLocaleString()}`);
+    devLog(`   % Tierra: ${aporteSuelo.porcentajeTierra}%`);
+    devLog(`   % Capital: ${aporteSuelo.porcentajeCapital}%`);
 
     // Guardar en proyecto
     await updateDoc(proyectoRef, {
@@ -213,8 +214,8 @@ export async function distribuirGananciasProyecto(
       throw new Error('El proyecto tuvo pérdidas, no se puede distribuir ganancia negativa');
     }
 
-    console.log(`\n💰 Ganancia Total Proyecto: S/ ${gananciaTotalProyecto.toLocaleString()}`);
-    console.log(`   Distribución: ${aporteSuelo.porcentajeTierra}% Tierra + ${aporteSuelo.porcentajeCapital}% Capital`);
+    devLog(`\n💰 Ganancia Total Proyecto: S/ ${gananciaTotalProyecto.toLocaleString()}`);
+    devLog(`   Distribución: ${aporteSuelo.porcentajeTierra}% Tierra + ${aporteSuelo.porcentajeCapital}% Capital`);
 
     // 3. Obtener todos los socios activos
     const sociosQuery = query(
@@ -228,7 +229,7 @@ export async function distribuirGananciasProyecto(
       throw new Error('No hay socios en este proyecto');
     }
 
-    console.log(`\n👥 Distribuyendo a ${sociosSnap.size} socios...\n`);
+    devLog(`\n👥 Distribuyendo a ${sociosSnap.size} socios...\n`);
 
     const distribucion: DistribucionGanancia[] = [];
 
@@ -236,9 +237,9 @@ export async function distribuirGananciasProyecto(
     for (const socioDoc of sociosSnap.docs) {
       const socio = { id: socioDoc.id, ...socioDoc.data() } as Socio;
 
-      console.log(`\n🧑 Socio: ${socio.usuarioId}`);
-      console.log(`   Tipo: ${socio.tipoSocio.toUpperCase()}`);
-      console.log(`   Valor Aportado: S/ ${socio.valorAportado.toLocaleString()}`);
+      devLog(`\n🧑 Socio: ${socio.usuarioId}`);
+      devLog(`   Tipo: ${socio.tipoSocio.toUpperCase()}`);
+      devLog(`   Valor Aportado: S/ ${socio.valorAportado.toLocaleString()}`);
 
       // Calcular ganancia del socio
       const gananciaSocio = calcularGananciaSocio(
@@ -251,12 +252,12 @@ export async function distribuirGananciasProyecto(
 
       const roiReal = ((gananciaSocio / socio.valorAportado) * 100);
 
-      console.log(`   💵 Ganancia: S/ ${gananciaSocio.toLocaleString()}`);
-      console.log(`   📈 ROI Real: ${roiReal.toFixed(2)}%`);
+      devLog(`   💵 Ganancia: S/ ${gananciaSocio.toLocaleString()}`);
+      devLog(`   📈 ROI Real: ${roiReal.toFixed(2)}%`);
 
       // 5. Transferir via Odoo Wallet
       /* 
-      TODO: Refactor this to use a secure Server Action for admin transfers.
+      NOTA: la ganancia se acredita vía saldo de plataforma en Firebase (enviarGanancia/sumarSaldo), no vía Odoo.
       The previous client-side API call signature was mismatching and insecure.
       
       try {
@@ -267,7 +268,7 @@ export async function distribuirGananciasProyecto(
           referencia: `GANANCIA-${proyectoId}-${socio.id}`
         });
 
-        console.log(`   ✅ Transferencia Odoo exitosa`);
+        devLog(`   ✅ Transferencia Odoo exitosa`);
       } catch (odooError) {
         console.error(`   ❌ Error en transferencia Odoo:`, odooError);
         // Continuar con otros socios aunque falle uno
@@ -305,8 +306,8 @@ export async function distribuirGananciasProyecto(
       });
     }
 
-    console.log('\n✅ Distribución completada exitosamente');
-    console.log(`   Total distribuido: S/ ${distribucion.reduce((sum, d) => sum + d.gananciaCalculada, 0).toLocaleString()}`);
+    devLog('\n✅ Distribución completada exitosamente');
+    devLog(`   Total distribuido: S/ ${distribucion.reduce((sum, d) => sum + d.gananciaCalculada, 0).toLocaleString()}`);
 
     return distribucion;
 

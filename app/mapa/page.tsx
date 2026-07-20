@@ -16,31 +16,15 @@ import {
   FaExternalLinkAlt,
 } from 'react-icons/fa';
 import { MdApartment, MdHouse, MdBusiness, MdLandscape, MdLocationCity } from 'react-icons/md';
+import type { ProyectoMapa, CategoriaProducto } from '@/components/mapa/MapaInteractivo';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
-type CategoriaProducto =
-  | 'departamento' | 'terreno' | 'casa'
-  | 'oficina' | 'localComercial' | 'habilitacionUrbana';
-
+// ProyectoMapa y CategoriaProducto viven en components/mapa/MapaInteractivo.tsx
+// (única fuente de verdad): antes había una segunda declaración acá,
+// estructuralmente igual pero con `categoria: string` en vez del union real
+// — TypeScript las trataba como tipos "nominalmente" distintos pese a verse
+// idénticas, lo que rompía bajo `strict: true`.
 type FiltroEstado = 'todos' | 'activo' | 'liquidado';
-
-interface ProyectoMapa {
-  id: string;
-  nombre: string;
-  empresa: string;
-  categoria: CategoriaProducto;
-  estado: boolean;
-  distribucionEjecutada?: boolean;
-  coordenadas?: { lat: number; lng: number };
-  cordenadas?: { lat: number; lng: number };
-  precio?: number;
-  monto?: number;
-  roiReal?: number;
-  gananciaNeta?: number;
-  urlimagen?: string | string[];
-  direccion?: string;
-  inversores?: string[];
-}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const CATEGORIAS_CONFIG: Record<CategoriaProducto, { label: string; color: string; bg: string; icon: React.ReactNode }> = {

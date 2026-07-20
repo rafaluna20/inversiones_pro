@@ -82,8 +82,11 @@ describe('Validation Module', () => {
   describe('registrarInversionSchema', () => {
     test('debe validar inversión correctamente', () => {
       const inversion = {
-        proyectoId: 'abc123xyz456789',
-        usuarioId: 'user123abc456789',
+        // objectIdSchema exige 20-28 caracteres alfanuméricos (rango real de
+        // un ID de Firestore o un UID de Firebase Auth) — ver
+        // lib/security/validation.ts.
+        proyectoId: 'abc123xyz456789proyecto',
+        usuarioId: 'user123abc456789usuario1',
         etapa: 'tierra',
         numeroCubos: 5,
         montoTotal: 50000,

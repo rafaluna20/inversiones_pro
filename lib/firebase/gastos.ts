@@ -20,6 +20,7 @@ import {
 import { db } from './config';
 import type { GastoProyecto } from '@/types';
 import { registrarGastoSchema, eliminarGastoSchema } from '@/lib/security/validation';
+import { devLog } from '@/lib/utils/devLog';
 
 /**
  * Agregar un nuevo gasto a un proyecto
@@ -58,7 +59,7 @@ export async function agregarGasto(
     // Recalcular totales del proyecto
     await recalcularTotalesGastos(proyectoId);
 
-    console.log(`✅ Gasto agregado: ${docRef.id}`);
+    devLog(`✅ Gasto agregado: ${docRef.id}`);
     return docRef.id;
   } catch (error) {
     console.error('❌ Error al agregar gasto:', error);
@@ -90,7 +91,7 @@ export async function actualizarGasto(
       await recalcularTotalesGastos(proyectoId);
     }
 
-    console.log(`✅ Gasto actualizado: ${gastoId}`);
+    devLog(`✅ Gasto actualizado: ${gastoId}`);
   } catch (error) {
     console.error('❌ Error al actualizar gasto:', error);
     throw error;
@@ -143,7 +144,7 @@ export async function eliminarGasto(
     // Recalcular totales
     await recalcularTotalesGastos(proyectoId);
 
-    console.log(`✅ Gasto eliminado: ${gastoId}`);
+    devLog(`✅ Gasto eliminado: ${gastoId}`);
   } catch (error) {
     console.error('❌ Error al eliminar gasto:', error);
     throw error;
@@ -258,7 +259,7 @@ export async function recalcularTotalesGastos(proyectoId: string): Promise<void>
       updatedAt: serverTimestamp()
     });
 
-    console.log(`✅ Totales recalculados para proyecto ${proyectoId}:`, {
+    devLog(`✅ Totales recalculados para proyecto ${proyectoId}:`, {
       precioCompra,
       totalGastos,
       costoTotalProyecto,

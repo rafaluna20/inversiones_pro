@@ -6,6 +6,12 @@ import Link from 'next/link';
 import { doc, getDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import useAutenticacion from '@/Hooks/useAutenticacion';
+import {
+  invertirEnProyectoAction,
+  eliminarInversionAction,
+  distribuirGananciaLegacyAction,
+  depositarRecaudadoAction,
+} from '@/app/actions/inversion';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { FaHeart, FaRegHeart, FaMapMarkerAlt, FaWhatsapp } from 'react-icons/fa';
@@ -24,12 +30,19 @@ import ProjectClosureReport from '@/components/productos/ProjectClosureReport';
 import PriceEditModal from '@/components/productos/PriceEditModal';
 import MobileInvestmentCTA from '@/components/productos/MobileInvestmentCTA';
 import GastosProyecto from '@/components/productos/GastosProyecto';
-import restarSaldo from '@/Validacion/restarSaldo';
-import sumarSaldo from '@/Validacion/sumarSaldo';
-import sumarSaldoAcumulado from '@/Validacion/sumarSaldoAcumulado';
-import restarSaldoAcumulado from '@/Validacion/restarSaldoAcumulado';
-import enviarGanancia from '@/Validacion/enviarGanancia';
-import restarSaldoGanancia from '@/Validacion/restarSaldoGanancia';
+
+/**
+ * NOTA DE ARQUITECTURA: las mutaciones de saldo/inversores de esta página ya
+ * NO corren en el navegador. Antes usaban Validacion/restarSaldo.ts,
+ * sumarSaldo.ts, etc. (o, en un paso intermedio, una runTransaction del SDK
+ * cliente) — ambos enfoques seguían ejecutándose con la sesión del propio
+ * usuario. Ahora cada operación financiera (invertir, eliminar inversión,
+ * distribuir ganancias, depositar recaudado) es un server action en
+ * app/actions/inversion.ts que verifica el ID token con Firebase Admin SDK y
+ * corre la transacción con privilegios de servidor — el cliente ya no tiene
+ * forma de falsificar de qué usuario es la operación ni de saltarse la
+ * lógica abriendo la consola del navegador.
+ */
 
 interface Inversor {
   usuarioId: string;
@@ -261,98 +274,21 @@ export default function ProductoDetallesPage() {
   const handleInvestmentSubmit = async (data: InversionData) => {
     if (!usuario || !producto) return;
 
-    const docRef = doc(db, 'productos', params.id as string);
-    const docSnap = await getDoc(docRef);
-
-    if (!docSnap.exists()) {
-      showToast.error('Producto no encontrado');
-      return;
-    }
-
-    const inversores = producto.inversores || [];
-    const totalCubosActual = inversores.reduce((sum: number, inv: any) => sum + inv.cubos, 0);
-    const cubosLibres = 100 - totalCubosActual;
-
-    // Bloqueo por fecha límite (expirado)
-    if (producto.fechaLimite && Date.now() > producto.fechaLimite) {
-      showToast.error('El plazo de recaudación para este proyecto ha expirado.');
-      setShowInvestModal(false);
-      return;
-    }
-
-    // Bloqueo definitivo: no se puede invertir si no hay cubos disponibles
-    if (cubosLibres <= 0) {
-      showToast.error('Este proyecto ya alcanzó el 100% de financiamiento. No hay cubos disponibles.');
-      setShowInvestModal(false);
-      return;
-    }
-
-    // Si la cantidad pedida supera los cubos libres, ajustar (con tolerancia para errores de redondeo)
-    const cubosRedondeados = Math.round(data.cubos * 10000) / 10000;
-    const cubosLibresRedondeados = Math.round(cubosLibres * 10000) / 10000;
-    
-    if (cubosRedondeados > cubosLibresRedondeados + 0.0001) {
-      showToast.error(`Solo quedan ${cubosLibresRedondeados.toFixed(4)} cubos disponibles. Ajusta tu inversión.`);
-      return;
-    }
-
-    const precioPorCubo = producto.precio / 100;
-    const costoTotal = data.cubos * precioPorCubo;
-
     try {
-      if (isEditingInvestment && editingInvestor) {
-        const index = inversores.findIndex((inv: Inversor) => inv.usuarioId === usuario.uid);
+      const idToken = await usuario.getIdToken();
+      const resultado = await invertirEnProyectoAction(
+        idToken,
+        params.id as string,
+        data,
+        Boolean(isEditingInvestment && editingInvestor)
+      );
 
-        if (index !== -1) {
-          const valorViejo = (inversores[index].cubos * producto.precio) / 100;
-
-          await sumarSaldo(usuario.uid, valorViejo);
-          await restarSaldoAcumulado(producto.creador.id, params.id as string, valorViejo);
-
-          const nuevoCosto = (data.cubos * producto.precio) / 100;
-          const error = await restarSaldo(usuario.uid, producto.creador.id, nuevoCosto);
-
-          if (error) {
-            showToast.error(error);
-            return;
-          }
-
-          await sumarSaldoAcumulado(producto.creador.id, params.id as string, nuevoCosto);
-
-          inversores[index] = {
-            ...inversores[index],
-            descripcion: data.descripcion,
-            cubos: data.cubos,
-            categoria: data.categoria,
-            fecha: Date.now(),
-          };
-
-          await updateDoc(docRef, { inversores });
-          showToast.success('Inversión actualizada');
-        }
-      } else {
-        const error = await restarSaldo(usuario.uid, producto.creador.id, costoTotal);
-
-        if (error) {
-          showToast.error(error);
-          return;
-        }
-
-        await sumarSaldoAcumulado(producto.creador.id, params.id as string, costoTotal);
-
-        const nuevaInversion: Inversor = {
-          usuarioId: usuario.uid,
-          usuarioNombre: usuario.displayName || 'Usuario',
-          icono: usuario.photoURL || '',
-          fecha: Date.now(),
-          ...data,
-        };
-
-        const nuevosInversores = [...inversores, nuevaInversion];
-        await updateDoc(docRef, { inversores: nuevosInversores });
-        showToast.success('¡Inversión realizada con éxito!');
+      if (!resultado.ok) {
+        showToast.error(resultado.mensaje);
+        return;
       }
 
+      showToast.success(resultado.mensaje);
       setShowInvestModal(false);
       setIsEditingInvestment(false);
       setEditingInvestor(null);
@@ -366,20 +302,15 @@ export default function ProductoDetallesPage() {
     if (!usuario || !producto) return;
 
     try {
-      const docRef = doc(db, 'productos', params.id as string);
-      const inversores = producto.inversores || [];
+      const idToken = await usuario.getIdToken();
+      const resultado = await eliminarInversionAction(idToken, params.id as string);
 
-      const nuevosInversores = inversores.filter(
-        (inv: Inversor) => inv.usuarioId !== usuario.uid
-      );
+      if (!resultado.ok) {
+        showToast.error(resultado.mensaje);
+        return;
+      }
 
-      const montoDevolucion = (inversor.cubos * producto.precio) / 100;
-
-      await sumarSaldo(usuario.uid, montoDevolucion);
-      await restarSaldoAcumulado(producto.creador.id, params.id as string, montoDevolucion);
-      await updateDoc(docRef, { inversores: nuevosInversores });
-
-      showToast.success('Inversión eliminada y saldo devuelto');
+      showToast.success(resultado.mensaje);
     } catch (err: any) {
       console.error('Error al eliminar inversión:', err);
       showToast.error('Error al eliminar inversión');
@@ -389,39 +320,21 @@ export default function ProductoDetallesPage() {
   const handleDistributeProfit = async (gananciaTotal: number, aportarGanancia: boolean) => {
     if (!usuario || !producto || !esCreador) return;
 
-    // Protección de Capital: El creador no puede distribuir menos del total recaudado (precio del proyecto)
-    if (gananciaTotal < producto.precio) {
-      showToast.error(`La distribución debe ser mayor o igual al capital invertido (${formatCurrency(producto.precio)})`);
-      return;
-    }
-
     try {
-      const inversores = producto.inversores || [];
+      const idToken = await usuario.getIdToken();
+      const resultado = await distribuirGananciaLegacyAction(
+        idToken,
+        params.id as string,
+        gananciaTotal,
+        aportarGanancia
+      );
 
-      // Si el creador aporta la ganancia física obtenida en el mundo real,
-      // se la sumamos primero a su saldo virtual para evitar descuadres.
-      if (aportarGanancia) {
-        const gananciaNeta = gananciaTotal - producto.precio;
-        if (gananciaNeta > 0) {
-          await sumarSaldo(usuario.uid, gananciaNeta);
-        }
-      }
-
-      const error = await restarSaldoGanancia(usuario.uid, producto.creador.id, gananciaTotal);
-      if (error) {
-        showToast.error(error);
+      if (!resultado.ok) {
+        showToast.error(resultado.mensaje);
         return;
       }
 
-      await enviarGanancia(inversores, gananciaTotal, producto.precio);
-
-      const docRef = doc(db, 'productos', params.id as string);
-      await updateDoc(docRef, {
-        estado: false,
-        monto: gananciaTotal,
-      });
-
-      showToast.success('Ganancias distribuidas exitosamente');
+      showToast.success(resultado.mensaje);
       setShowProfitModal(false);
     } catch (err: any) {
       console.error('Error al distribuir ganancias:', err);
@@ -432,28 +345,21 @@ export default function ProductoDetallesPage() {
   const handleDepositRecaudado = async () => {
     if (!usuario || !producto || !esCreador) return;
 
-    // Verificación inicial optimista
     if (producto.depositoRecaudado) {
       showToast.error('Los fondos ya han sido depositados.');
       return;
     }
 
     try {
-      // Verificación en tiempo real contra la base de datos para evitar Race Conditions (Doble click)
-      const docRef = doc(db, 'productos', params.id as string);
-      const docSnap = await getDoc(docRef);
-      
-      if (!docSnap.exists() || docSnap.data().depositoRecaudado) {
-        showToast.error('Los fondos ya fueron retirados en otra transacción. Acción denegada.');
+      const idToken = await usuario.getIdToken();
+      const resultado = await depositarRecaudadoAction(idToken, params.id as string);
+
+      if (!resultado.ok) {
+        showToast.error(resultado.mensaje);
         return;
       }
 
-      await sumarSaldo(producto.creador.id, montoRecaudado);
-      await restarSaldoAcumulado(producto.creador.id, params.id as string, montoRecaudado);
-
-      await updateDoc(docRef, { depositoRecaudado: true });
-
-      showToast.success('Fondos depositados a tu saldo');
+      showToast.success(resultado.mensaje);
     } catch (err: any) {
       console.error('Error al depositar:', err);
       showToast.error('Error al depositar fondos');

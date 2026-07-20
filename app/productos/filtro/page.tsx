@@ -113,7 +113,7 @@ export default function FiltroPage() {
         ) : (
           <div className="text-center py-20">
             <p className="text-gray-400 text-xl mb-2">
-              No hay productos en la categoría "{categoriaNombre}"
+              No hay productos en la categoría &quot;{categoriaNombre}&quot;
             </p>
             <p className="text-gray-500">
               Intenta con otra categoría

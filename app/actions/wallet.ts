@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { TransferSchema } from '@/lib/schemas';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_WALLET_API_URL || '';
-const ODOO_DB = process.env.NEXT_PUBLIC_ODOO_DB || 'odoo_akallpav2';
+const ODOO_DB = process.env.NEXT_PUBLIC_ODOO_DB || 'odoo_akallpav1';
 const COOKIE_NAME = 'billetera_session';
 
 async function getOdooToken() {

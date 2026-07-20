@@ -49,7 +49,7 @@ export default function BuscarPage() {
                     </h1>
                     <p className="text-gray-400 text-lg">
                         {q ? (
-                            <>Resultados para: <span className="text-blue-400 font-semibold">"{q}"</span></>
+                            <>Resultados para: <span className="text-blue-400 font-semibold">&quot;{q}&quot;</span></>
                         ) : (
                             "Ingresa un término para buscar proyectos"
                         )}

@@ -160,10 +160,9 @@ http://localhost:3000
 
 - ✅ Validación de inputs con Zod
 - ✅ Sanitización contra XSS
-- ✅ Rate limiting con Redis
+- ✅ Rate limiting en memoria por instancia (ver `lib/security/edge-rate-limit.ts`) — no distribuido; para límites estrictos y auditables a mayor escala hace falta un backend compartido (ej. Redis/Upstash), aún no implementado
 - ✅ RBAC (Role-Based Access Control)
-- ✅ Encriptación de datos sensibles
-- ✅ Auditoría de operaciones críticas
+- ✅ Auditoría de operaciones críticas (hash SHA-256 en las liquidaciones de proyecto)
 
 ---
 
