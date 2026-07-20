@@ -101,6 +101,35 @@ describe('firestore.rules — usuarios (el agujero real que encontramos en produ
     const bob = testEnv.authenticatedContext('bob');
     await assertSucceeds(bob.firestore().collection('usuarios').doc('alice').get());
   });
+
+  test('un usuario nuevo SÍ puede crear su perfil al registrarse (shape real de crear-cuenta/page.tsx, sin campo roles)', async () => {
+    const alice = testEnv.authenticatedContext('alice');
+    await assertSucceeds(
+      alice.firestore().collection('usuarios').doc('alice').set({
+        saldo: 0,
+        like: 0,
+        phone: '987654321',
+        departamento: 'Lima',
+        provincia: 'Lima',
+        distrito: 'San Juan de Miraflores',
+        ganancia: 0,
+        inversionesCompletadas: 0,
+        nombre: 'Alice',
+        email: 'alice@test.com',
+        photoURL: '',
+        votantes: [],
+        saldoRecaudado: [],
+        createdAt: Date.now(),
+      })
+    );
+  });
+
+  test('un usuario nuevo NO puede autoasignarse un rol distinto de "usuario" al crear su perfil', async () => {
+    const alice = testEnv.authenticatedContext('alice');
+    await assertFails(
+      alice.firestore().collection('usuarios').doc('alice').set({ saldo: 0, roles: ['admin'] })
+    );
+  });
 });
 
 describe('firestore.rules — bookmarks (favoritos)', () => {
@@ -153,6 +182,40 @@ describe('firestore.rules — productos', () => {
     await seedProducto('p1', 'creador-x');
     const creador = testEnv.authenticatedContext('creador-x');
     await assertSucceeds(creador.firestore().collection('productos').doc('p1').update({ precio: 5000 }));
+  });
+
+  describe('gastos (subcolección real de productos/{id}/gastos, no colección de nivel superior)', () => {
+    async function seedGasto(proyectoId: string, gastoId: string) {
+      await seed(`productos/${proyectoId}/gastos`, gastoId, {
+        concepto: 'Notaría',
+        categoria: 'notaria',
+        monto: 500,
+        proyectoId,
+      });
+    }
+
+    test('cualquier usuario autenticado (ej. el gestor viendo su propio proyecto) puede leer los gastos', async () => {
+      await seedProducto('p1', 'creador-x');
+      await seedGasto('p1', 'g1');
+      const creador = testEnv.authenticatedContext('creador-x');
+      await assertSucceeds(creador.firestore().collection('productos/p1/gastos').doc('g1').get());
+    });
+
+    test('el gestor del proyecto SÍ puede agregar un gasto', async () => {
+      await seedProducto('p1', 'creador-x');
+      const creador = testEnv.authenticatedContext('creador-x');
+      await assertSucceeds(
+        creador.firestore().collection('productos/p1/gastos').add({ concepto: 'Notaría', monto: 500, proyectoId: 'p1' })
+      );
+    });
+
+    test('un usuario que no es el gestor NO puede agregar un gasto', async () => {
+      await seedProducto('p1', 'creador-x');
+      const bob = testEnv.authenticatedContext('bob');
+      await assertFails(
+        bob.firestore().collection('productos/p1/gastos').add({ concepto: 'Falso', monto: 999999, proyectoId: 'p1' })
+      );
+    });
   });
 });
 

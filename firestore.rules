@@ -132,9 +132,16 @@ service cloud.firestore {
       // que el dueño puede tocar el documento de otro usuario.
       allow read: if signedIn();
 
+      // BUG CRÍTICO CORREGIDO: `request.resource.data.roles` accedía a una
+      // clave que crear-cuenta/page.tsx nunca escribe. En el lenguaje de
+      // reglas de Firestore, leer una clave inexistente de un mapa hace
+      // fallar TODA la expresión (deniega, no la trata como ausente) — esto
+      // bloqueó el registro de CUALQUIER usuario nuevo desde que se desplegó
+      // por primera vez esta regla. `('roles' in ...)` chequea existencia
+      // antes de leer el valor, evitando el error.
       allow create: if isSelf(uid)
         && request.resource.data.saldo == 0
-        && (request.resource.data.roles is list == false || request.resource.data.roles == ['usuario']);
+        && (!('roles' in request.resource.data) || request.resource.data.roles == ['usuario']);
 
       // El dueño puede actualizar su propio doc (incluido `saldo`, que
       // Validacion/acreditarDesdeBilletera.ts sigue escribiendo desde el
@@ -171,6 +178,17 @@ service cloud.firestore {
         || (signedIn() && soloEstosCampos(['votos', 'haVotado', 'comentarios']));
 
       allow delete: if esGestorDelProyecto(proyectoId) || isAdmin();
+
+      // GASTOS del proyecto — lib/firebase/gastos.ts guarda esto como
+      // SUBCOLECCIÓN (`productos/{proyectoId}/gastos`), no como colección de
+      // nivel superior. La regla `match /gastos/{gastoId}` de nivel superior
+      // que existía antes NUNCA coincidía con esta ruta real — caía al
+      // catch-all y denegaba todo, incluida la lectura del propio gestor de
+      // los gastos de su propio proyecto (pestaña "Gastos"/"Admin").
+      match /gastos/{gastoId} {
+        allow read: if signedIn();
+        allow write: if esGestorDelProyecto(proyectoId);
+      }
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -235,19 +253,6 @@ service cloud.firestore {
     match /reconciliation_reports/{reportId} {
       allow read: if isAdmin();
       allow write: if false;
-    }
-
-    // ─────────────────────────────────────────────────────────────────
-    // GASTOS — hoy CUALQUIER autenticado podía escribir cualquier gasto de
-    // cualquier proyecto. Se restringe a gestor/admin del proyecto. ⚠️ no
-    // se verificó a fondo lib/firebase/gastos.ts en esta sesión — si algún
-    // flujo permite que un inversor suba comprobantes directamente, esto
-    // lo bloquearía y hay que ajustar.
-    // ─────────────────────────────────────────────────────────────────
-    match /gastos/{gastoId} {
-      allow read: if signedIn();
-      allow write: if esGestorDelProyecto(resource.data.proyectoId)
-        || (request.resource.data.proyectoId is string && esGestorDelProyecto(request.resource.data.proyectoId));
     }
 
     match /hitos/{hitoId} {

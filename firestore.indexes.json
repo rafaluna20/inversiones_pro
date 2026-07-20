@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "distribuciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "gestorId", "order": "ASCENDING" },
+        { "fieldPath": "fechaEjecucion", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
