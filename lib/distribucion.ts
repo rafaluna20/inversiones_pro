@@ -12,7 +12,22 @@
  * @version 1.0 Enterprise
  */
 
-import type { Inversion, DistribucionSocio } from '@/types';
+import type { DistribucionSocio } from '@/types';
+
+/**
+ * Solo los campos que este motor realmente lee. Antes el parámetro era
+ * `Inversion[]` completo (con una docena de campos que nunca se usan acá) —
+ * eso obligaba a quien llamara a esta función a fabricar objetos falsos con
+ * todos esos campos con tal de satisfacer el tipo, incluso cuando los datos
+ * reales vienen de un modelo distinto (el array `producto.inversores[]`,
+ * ver app/actions/distribucion.ts). `Inversion[]` real sigue siendo
+ * compatible acá sin cambios, por tipado estructural.
+ */
+export interface InversionParaDistribucion {
+  usuarioId: string;
+  montoInvertido: number;
+  confirmada: boolean;
+}
 
 export interface ResultadoDistribucion {
   utilidadNeta: number;
@@ -43,7 +58,7 @@ export type ResultadoCalculo =
 export function calcularDistribucion(
   utilidadNeta: number,
   comisionGestor: number,
-  inversiones: Inversion[],
+  inversiones: InversionParaDistribucion[],
   proyectoId: string
 ): ResultadoCalculo {
   // --- Validaciones ---

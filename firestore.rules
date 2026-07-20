@@ -175,21 +175,19 @@ service cloud.firestore {
 
     // ─────────────────────────────────────────────────────────────────
     // INVERSIONES (colección separada del modelo bifásico — hoy sin
-    // ninguna pantalla conectada: registrarInversion()/aprobarInversion()
-    // en lib/firebase/proyectos-bifasicos.ts no tienen callers. Reglas
-    // estrictas desde ya para que, el día que se conecten, ya estén bien.)
+    // ninguna pantalla conectada. La única vía de escritura es
+    // invertirEnEtapaAction (app/actions/inversion-bifasica.ts), que usa
+    // Admin SDK y por lo tanto ignora estas reglas. Por eso create/update
+    // se deniegan del todo acá: la versión anterior permitía que CUALQUIER
+    // cliente creara un doc con confirmada=false sin que se le debitara un
+    // sol — "invertí sin pagar". Solo lectura scoped al dueño/gestor.)
     // ─────────────────────────────────────────────────────────────────
     match /inversiones/{inversionId} {
       allow read: if signedIn() && (resource.data.usuarioId == request.auth.uid
         || esGestorDelProyecto(resource.data.proyectoId));
 
-      allow create: if signedIn()
-        && request.resource.data.usuarioId == request.auth.uid
-        && request.resource.data.confirmada == false
-        && request.resource.data.gananciaReal == 0;
-
-      allow update: if esGestorDelProyecto(resource.data.proyectoId);
-
+      allow create: if false;
+      allow update: if false;
       allow delete: if false;
     }
 

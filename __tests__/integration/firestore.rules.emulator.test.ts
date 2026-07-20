@@ -156,6 +156,26 @@ describe('firestore.rules — productos', () => {
   });
 });
 
+describe('firestore.rules — inversiones (modelo bifásico, server-only)', () => {
+  test('ningún cliente puede crear una inversión directamente, ni siquiera pagándose a sí mismo (solo invertirEnEtapaAction, vía Admin SDK)', async () => {
+    const alice = testEnv.authenticatedContext('alice');
+    await assertFails(
+      alice.firestore().collection('inversiones').add({
+        proyectoId: 'p1',
+        usuarioId: 'alice',
+        confirmada: false,
+        gananciaReal: 0,
+      })
+    );
+  });
+
+  test('el dueño de la inversión sí puede leerla', async () => {
+    await seed('inversiones', 'inv1', { proyectoId: 'p1', usuarioId: 'alice' });
+    const alice = testEnv.authenticatedContext('alice');
+    await assertSucceeds(alice.firestore().collection('inversiones').doc('inv1').get());
+  });
+});
+
 describe('firestore.rules — distribuciones (documento "inmutable")', () => {
   test('nadie puede escribir distribuciones desde el cliente, ni siquiera el propio gestor', async () => {
     const alice = testEnv.authenticatedContext('alice');
