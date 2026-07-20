@@ -20,7 +20,12 @@
  * para estos flujos.
  */
 
-import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin';
+import {
+  getAdminDb,
+  verificarIdToken,
+  mensajeErrorVerificacion,
+  type UsuarioVerificado,
+} from '@/lib/firebase/admin';
 
 export interface InversionData {
   descripcion: string;
@@ -41,22 +46,6 @@ interface Inversor {
 export interface AccionInversionResult {
   ok: boolean;
   mensaje: string;
-}
-
-interface UsuarioVerificado {
-  uid: string;
-  nombre: string;
-  foto: string;
-}
-
-/** Verifica el ID token del cliente contra Firebase Auth (Admin SDK). */
-async function verificarUsuario(idToken: string): Promise<UsuarioVerificado> {
-  const decoded = await getAdminAuth().verifyIdToken(idToken);
-  return {
-    uid: decoded.uid,
-    nombre: (decoded.name as string) || 'Usuario',
-    foto: (decoded.picture as string) || '',
-  };
 }
 
 function actualizarSaldoRecaudado(
@@ -91,9 +80,9 @@ export async function invertirEnProyectoAction(
 ): Promise<AccionInversionResult> {
   let usuario: UsuarioVerificado;
   try {
-    usuario = await verificarUsuario(idToken);
-  } catch {
-    return { ok: false, mensaje: 'Sesión inválida o expirada. Vuelve a iniciar sesión.' };
+    usuario = await verificarIdToken(idToken);
+  } catch (error) {
+    return { ok: false, mensaje: mensajeErrorVerificacion(error) };
   }
 
   const db = getAdminDb();
@@ -220,9 +209,9 @@ export async function eliminarInversionAction(
 ): Promise<AccionInversionResult> {
   let usuario: UsuarioVerificado;
   try {
-    usuario = await verificarUsuario(idToken);
-  } catch {
-    return { ok: false, mensaje: 'Sesión inválida o expirada. Vuelve a iniciar sesión.' };
+    usuario = await verificarIdToken(idToken);
+  } catch (error) {
+    return { ok: false, mensaje: mensajeErrorVerificacion(error) };
   }
 
   const db = getAdminDb();
@@ -284,9 +273,9 @@ export async function distribuirGananciaLegacyAction(
 ): Promise<AccionInversionResult> {
   let usuario: UsuarioVerificado;
   try {
-    usuario = await verificarUsuario(idToken);
-  } catch {
-    return { ok: false, mensaje: 'Sesión inválida o expirada. Vuelve a iniciar sesión.' };
+    usuario = await verificarIdToken(idToken);
+  } catch (error) {
+    return { ok: false, mensaje: mensajeErrorVerificacion(error) };
   }
 
   const db = getAdminDb();
@@ -383,9 +372,9 @@ export async function depositarRecaudadoAction(
 ): Promise<AccionInversionResult> {
   let usuario: UsuarioVerificado;
   try {
-    usuario = await verificarUsuario(idToken);
-  } catch {
-    return { ok: false, mensaje: 'Sesión inválida o expirada. Vuelve a iniciar sesión.' };
+    usuario = await verificarIdToken(idToken);
+  } catch (error) {
+    return { ok: false, mensaje: mensajeErrorVerificacion(error) };
   }
 
   const db = getAdminDb();

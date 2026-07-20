@@ -17,7 +17,7 @@
  * @version 2.0 Enterprise — Admin SDK
  */
 
-import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin';
+import { getAdminDb, verificarIdToken, mensajeErrorVerificacion } from '@/lib/firebase/admin';
 import { calcularDistribucion } from '@/lib/distribucion';
 import {
   Rol,
@@ -104,10 +104,10 @@ export async function ejecutarDistribucionAction(
   try {
     let gestorUid: string;
     try {
-      const decoded = await getAdminAuth().verifyIdToken(idToken);
+      const decoded = await verificarIdToken(idToken);
       gestorUid = decoded.uid;
-    } catch {
-      return { ok: false, mensaje: 'Sesión inválida o expirada. Vuelve a iniciar sesión.' };
+    } catch (error) {
+      return { ok: false, mensaje: mensajeErrorVerificacion(error) };
     }
 
     const db = getAdminDb();

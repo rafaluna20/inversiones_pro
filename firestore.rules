@@ -120,7 +120,17 @@ service cloud.firestore {
     // USUARIOS
     // ─────────────────────────────────────────────────────────────────
     match /usuarios/{uid} {
-      allow read: if isSelf(uid) || isAdmin();
+      // LECCIÓN APRENDIDA AL DESPLEGAR: restringir la lectura a "solo el
+      // propio dueño" rompió funciones reales que necesitan leer el perfil
+      // de OTRO usuario — mostrar el teléfono del creador de un proyecto
+      // (Hooks/useCreadorPhone.ts) para contactarlo por WhatsApp, listas de
+      // inversores, perfiles públicos (/usuarios/[id], /perfil). Firestore
+      // no permite restringir por CAMPO en una regla de lectura (es
+      // documento completo o nada), así que la lectura queda abierta a
+      // cualquier autenticado — igual que estaba antes de este cambio. Lo
+      // que sí se cierra, y es lo que importa, es la ESCRITURA: nadie más
+      // que el dueño puede tocar el documento de otro usuario.
+      allow read: if signedIn();
 
       allow create: if isSelf(uid)
         && request.resource.data.saldo == 0
@@ -134,6 +144,15 @@ service cloud.firestore {
         && camposNoModificados(['roles', 'permisosAdicionales', 'permisosRevocados', 'email']);
 
       allow delete: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // BOOKMARKS (favoritos) — Hooks/useBookmarks.ts, doc keyed por uid.
+    // Colección real que no estaba contemplada en el borrador original:
+    // el catch-all denegaba todo, rompiendo "guardar favorito" en producción.
+    // ─────────────────────────────────────────────────────────────────
+    match /bookmarks/{uid} {
+      allow read, write: if isSelf(uid);
     }
 
     // ─────────────────────────────────────────────────────────────────

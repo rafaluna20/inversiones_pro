@@ -95,6 +95,27 @@ describe('firestore.rules — usuarios (el agujero real que encontramos en produ
     const anon = testEnv.unauthenticatedContext();
     await assertFails(anon.firestore().collection('usuarios').doc('alice').get());
   });
+
+  test('un usuario autenticado SÍ puede leer el perfil de otro (ej. teléfono del creador de un proyecto)', async () => {
+    await seed('usuarios', 'alice', { saldo: 100, phone: '987654321' });
+    const bob = testEnv.authenticatedContext('bob');
+    await assertSucceeds(bob.firestore().collection('usuarios').doc('alice').get());
+  });
+});
+
+describe('firestore.rules — bookmarks (favoritos)', () => {
+  test('el dueño puede leer y escribir sus propios favoritos', async () => {
+    const aliceDb = testEnv.authenticatedContext('alice').firestore();
+    await assertSucceeds(aliceDb.collection('bookmarks').doc('alice').set({ userId: 'alice', productos: ['p1'] }));
+    await assertSucceeds(aliceDb.collection('bookmarks').doc('alice').get());
+  });
+
+  test('un usuario NO puede leer ni escribir los favoritos de otro', async () => {
+    await seed('bookmarks', 'alice', { userId: 'alice', productos: ['p1'] });
+    const bobDb = testEnv.authenticatedContext('bob').firestore();
+    await assertFails(bobDb.collection('bookmarks').doc('alice').get());
+    await assertFails(bobDb.collection('bookmarks').doc('alice').update({ productos: ['p2'] }));
+  });
 });
 
 describe('firestore.rules — productos', () => {

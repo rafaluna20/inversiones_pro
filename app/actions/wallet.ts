@@ -2,7 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { TransferSchema } from '@/lib/schemas';
-import { getAdminAuth } from '@/lib/firebase/admin';
+import { verificarIdToken, mensajeErrorVerificacion } from '@/lib/firebase/admin';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_WALLET_API_URL || '';
 const ODOO_DB = process.env.NEXT_PUBLIC_ODOO_DB || 'odoo_akallpav1';
@@ -208,10 +208,10 @@ export async function withdrawFromPlatformAction(amount: number, idToken: string
 
     let firebaseUid: string;
     try {
-        const decoded = await getAdminAuth().verifyIdToken(idToken);
+        const decoded = await verificarIdToken(idToken);
         firebaseUid = decoded.uid;
-    } catch {
-        return { success: false, message: 'Sesión inválida o expirada. Vuelve a iniciar sesión.' };
+    } catch (error) {
+        return { success: false, message: mensajeErrorVerificacion(error) };
     }
 
     // Generar ID único de transacción en Firebase

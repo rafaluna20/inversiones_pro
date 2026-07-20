@@ -100,6 +100,73 @@ export function getAdminAuth(): Auth {
   return getAuth(getAdminApp());
 }
 
+/**
+ * Se lanza cuando el Admin SDK no pudo inicializarse por un problema de
+ * configuración del entorno (típicamente falta `FIREBASE_SERVICE_ACCOUNT_KEY`
+ * en el hosting) — a propósito, un tipo de error DISTINTO al de un ID token
+ * inválido/expirado, para que los server actions no le muestren "Sesión
+ * inválida" al usuario cuando el problema real es que el entorno no tiene la
+ * credencial cargada (ver verificarIdToken más abajo).
+ */
+export class AdminSdkNoConfiguradoError extends Error {
+  constructor(causa: unknown) {
+    super('El servicio de administración de Firebase no está configurado en este entorno.');
+    this.name = 'AdminSdkNoConfiguradoError';
+    this.cause = causa;
+  }
+}
+
+export interface UsuarioVerificado {
+  uid: string;
+  nombre: string;
+  foto: string;
+}
+
+/**
+ * Verifica un ID token del cliente y devuelve la identidad real del usuario.
+ * Usar esto (no `getAdminAuth().verifyIdToken` directo) en cada server
+ * action de dinero, para que el error de "falta configurar la credencial"
+ * quede claramente diferenciado de "el usuario tiene una sesión inválida" —
+ * confundir los dos hizo perder tiempo real de diagnóstico la primera vez
+ * que este flujo se probó en un despliegue sin la variable de entorno
+ * configurada (el error que veía el usuario decía "Sesión inválida" cuando
+ * el problema real era que Vercel no tenía FIREBASE_SERVICE_ACCOUNT_KEY).
+ */
+export async function verificarIdToken(idToken: string): Promise<UsuarioVerificado> {
+  let auth: Auth;
+  try {
+    auth = getAdminAuth();
+  } catch (causa) {
+    console.error(
+      '[Admin SDK] No se pudo inicializar — revisar que FIREBASE_SERVICE_ACCOUNT_KEY esté configurada en el entorno (Vercel: Settings → Environment Variables).',
+      causa
+    );
+    throw new AdminSdkNoConfiguradoError(causa);
+  }
+
+  const decoded = await auth.verifyIdToken(idToken);
+  return {
+    uid: decoded.uid,
+    nombre: (decoded.name as string) || 'Usuario',
+    foto: (decoded.picture as string) || '',
+  };
+}
+
+/**
+ * Mensaje de error apto para mostrar al usuario, a partir de lo que haya
+ * lanzado `verificarIdToken`. Deliberadamente NO expone detalles de
+ * configuración al cliente (eso queda en el log del servidor, ver arriba) —
+ * solo distingue "reintentá iniciar sesión" de "esto es un problema nuestro,
+ * no tuyo", para no mandar al usuario a repetir un login que no va a
+ * arreglar nada.
+ */
+export function mensajeErrorVerificacion(error: unknown): string {
+  if (error instanceof AdminSdkNoConfiguradoError) {
+    return 'Servicio no disponible temporalmente. Contacta al administrador.';
+  }
+  return 'Sesión inválida o expirada. Vuelve a iniciar sesión.';
+}
+
 /** projectId real que está usando el Admin SDK (útil para armar URLs de APIs de Google). */
 export function getAdminProjectId(): string {
   const projectId = getAdminApp().options.projectId;
