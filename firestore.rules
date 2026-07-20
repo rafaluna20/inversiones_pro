@@ -47,21 +47,20 @@
 //         en el cliente — debería seguir funcionando, escribe su propio uid).
 //      b. Votar y comentar en un producto (debe seguir funcionando).
 //      c. Crear/editar un producto propio (debe seguir funcionando).
-//      d. Invertir/eliminar inversión/distribuir/depositar recaudado —
-//         estos ya NO dependen de estas reglas (corren con Admin SDK desde
-//         app/actions/inversion.ts), así que no deberían verse afectados.
+//      d. Invertir/eliminar inversión/distribuir/depositar recaudado/liquidar
+//         proyecto (ejecutarDistribucionAction) — ya NO dependen de estas
+//         reglas (corren con Admin SDK, verificado extremo a extremo contra
+//         producción y contra el emulador), así que no deberían verse
+//         afectados por este archivo en absoluto.
 //      e. ⚠️ Retirar hacia la billetera bancaria (withdrawFromPlatformAction
-//         en app/actions/wallet.ts) — este server action llama a
-//         Validacion/retirarHaciaBilletera.ts, que usa el SDK CLIENTE de
-//         Firestore desde un contexto de servidor sin sesión persistente de
-//         Firebase Auth. Es probable que `request.auth` ya sea null ahí HOY
-//         (con o sin este cambio de reglas) — si es así, este flujo ya
-//         estaba fallando en producción antes de tocar nada. Probarlo
-//         explícitamente y, si falla, migrar wallet.ts a Admin SDK igual
-//         que se hizo con app/actions/inversion.ts (mismo patrón, ver
-//         lib/firebase/admin.ts). Mismo comentario aplica a
-//         app/actions/distribucion.ts (ejecutarDistribucionAction), que
-//         escribe `distribuciones` con el mismo patrón.
+//         en app/actions/wallet.ts) — YA se migró a Admin SDK (verifica el
+//         ID token real antes de tocar Firestore, igual que el resto), pero
+//         a diferencia de los demás no se pudo probar de punta a punta con
+//         un test automatizado: depende de `cookies()` de next/headers
+//         (requiere un request real de Next.js) y de un servidor Odoo
+//         externo, ninguno de los dos disponibles en Jest. Probarlo a mano
+//         en la app es la única verificación real que existe hoy de este
+//         flujo específico.
 //
 rules_version = '2';
 

@@ -75,7 +75,8 @@ export default function RetirarHaciaBilleteraPage() {
 
     try {
       const { withdrawFromPlatformAction } = await import('@/app/actions/wallet');
-      const result = await withdrawFromPlatformAction(montoNum, usuario.uid);
+      const idToken = await usuario.getIdToken();
+      const result = await withdrawFromPlatformAction(montoNum, idToken);
 
       showToast.dismiss(String(toastId));
 

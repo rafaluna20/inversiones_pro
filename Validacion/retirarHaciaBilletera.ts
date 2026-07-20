@@ -1,18 +1,21 @@
-import { doc, updateDoc, runTransaction } from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { getAdminDb } from '@/lib/firebase/admin';
 
 /**
  * Fase 1 del retiro: Descuenta el saldo de Firebase antes de llamar a Odoo.
  * Guarda un registro de la transacción en `plataforma_retiros` para prevenir
  * duplicados (idempotencia) y permitir auditoría/rollbacks.
  *
+ * Usa Firebase Admin SDK: el único caller real de estas funciones es
+ * app/actions/wallet.ts (withdrawFromPlatformAction), un server action —
+ * nunca corren con una sesión de navegador, así que el SDK cliente nunca
+ * tuvo un `request.auth` real ahí. La identidad del usuario ya se verificó
+ * con un ID token antes de llegar acá (ver wallet.ts).
+ *
  * El chequeo de idempotencia, la validación de saldo suficiente y las dos
  * escrituras (saldo del usuario + registro del retiro) corren dentro de una
- * única `runTransaction`: dos llamadas concurrentes para el mismo usuario ya
- * no pueden leer el mismo saldo y ambas pasar el chequeo, lo que evitaría un
- * sobregiro de la plataforma.
+ * única `runTransaction`.
  *
- * @param firebaseUid - UID del usuario
+ * @param firebaseUid - UID del usuario (ya verificado contra su ID token)
  * @param amount - Monto a retirar
  * @param transactionId - ID único generado por Next.js para esta transacción
  */
@@ -25,24 +28,25 @@ export async function descontarParaRetiro(
         return { success: false, error: 'Parámetros inválidos' };
     }
 
-    const retiroRef = doc(db, 'plataforma_retiros', transactionId);
-    const usuarioRef = doc(db, 'usuarios', firebaseUid);
+    const db = getAdminDb();
+    const retiroRef = db.collection('plataforma_retiros').doc(transactionId);
+    const usuarioRef = db.collection('usuarios').doc(firebaseUid);
 
     try {
-        const resultado = await runTransaction(db, async (tx) => {
+        const resultado = await db.runTransaction(async (tx) => {
             // Verificar idempotencia
             const retiroSnap = await tx.get(retiroRef);
-            if (retiroSnap.exists()) {
+            if (retiroSnap.exists) {
                 return { success: false, error: 'Esta transacción ya está en proceso o fue completada' };
             }
 
             // Leer saldo actual
             const usuarioSnap = await tx.get(usuarioRef);
-            if (!usuarioSnap.exists()) {
+            if (!usuarioSnap.exists) {
                 return { success: false, error: 'Usuario no encontrado' };
             }
 
-            const saldoActual = parseFloat(usuarioSnap.data().saldo ?? 0);
+            const saldoActual = parseFloat(usuarioSnap.data()?.saldo ?? 0);
 
             if (saldoActual < amount) {
                 return { success: false, error: 'Saldo insuficiente en la plataforma' };
@@ -80,8 +84,8 @@ export async function confirmarRetiroExitoso(
     odooTransactionId: string
 ): Promise<void> {
     try {
-        const retiroRef = doc(db, 'plataforma_retiros', transactionId);
-        await updateDoc(retiroRef, {
+        const db = getAdminDb();
+        await db.collection('plataforma_retiros').doc(transactionId).update({
             status: 'completed',
             odoo_transaction_id: odooTransactionId,
             fecha_completado: new Date().toISOString(),
@@ -106,14 +110,15 @@ export async function revertirRetiro(
     transactionId: string,
     razonFallo: string
 ): Promise<{ success: boolean; error?: string }> {
-    const retiroRef = doc(db, 'plataforma_retiros', transactionId);
-    const usuarioRef = doc(db, 'usuarios', firebaseUid);
+    const db = getAdminDb();
+    const retiroRef = db.collection('plataforma_retiros').doc(transactionId);
+    const usuarioRef = db.collection('usuarios').doc(firebaseUid);
 
     try {
-        const resultado = await runTransaction(db, async (tx) => {
+        const resultado = await db.runTransaction(async (tx) => {
             // Verificar que siga en estado pendiente
             const retiroSnap = await tx.get(retiroRef);
-            if (!retiroSnap.exists() || retiroSnap.data().status !== 'pending') {
+            if (!retiroSnap.exists || retiroSnap.data()?.status !== 'pending') {
                 return { success: false, error: 'La transacción no es válida para rollback' };
             }
 

@@ -7,21 +7,17 @@
  * calcula la distribución 10/90 y la persiste en Firestore
  * como un documento inmutable con hash SHA-256.
  *
- * @version 1.0 Enterprise
+ * Usa Firebase Admin SDK: antes usaba el SDK cliente de Firestore desde
+ * este mismo contexto de servidor (sin sesión de navegador real) y confiaba
+ * en un `gestorUid` que el cliente enviaba sin verificar — cualquiera podía
+ * llamar a esta función desde la consola pasando el uid de otra persona.
+ * Ahora se recibe un `idToken` y se verifica con Admin SDK antes de tocar
+ * cualquier dato.
+ *
+ * @version 2.0 Enterprise — Admin SDK
  */
 
-import {
-  doc,
-  getDoc,
-  collection,
-  addDoc,
-  updateDoc,
-  writeBatch,
-  query,
-  where,
-  getDocs,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase/config';
+import { getAdminDb, getAdminAuth } from '@/lib/firebase/admin';
 import { calcularDistribucion } from '@/lib/distribucion';
 import {
   Rol,
@@ -97,31 +93,42 @@ export interface EjecutarDistribucionResult {
  *
  * @param proyectoId - ID del proyecto a liquidar
  * @param utilidadNeta - Utilidad neta del proyecto declarada por el gestor
- * @param gestorUid - UID del usuario que solicita la distribución (debe ser el gestor)
+ * @param idToken - ID token del usuario que solicita la distribución (se
+ *   verifica con Admin SDK; el usuario resultante debe ser el gestor)
  */
 export async function ejecutarDistribucionAction(
   proyectoId: string,
   utilidadNeta: number,
-  gestorUid: string
+  idToken: string
 ): Promise<EjecutarDistribucionResult> {
   try {
-    // 1. Verificar que el proyecto existe y que el ejecutor es su gestor
-    const proyectoRef = doc(db, 'productos', proyectoId);
-    const proyectoSnap = await getDoc(proyectoRef);
+    let gestorUid: string;
+    try {
+      const decoded = await getAdminAuth().verifyIdToken(idToken);
+      gestorUid = decoded.uid;
+    } catch {
+      return { ok: false, mensaje: 'Sesión inválida o expirada. Vuelve a iniciar sesión.' };
+    }
 
-    if (!proyectoSnap.exists()) {
+    const db = getAdminDb();
+
+    // 1. Verificar que el proyecto existe y que el ejecutor es su gestor
+    const proyectoRef = db.collection('productos').doc(proyectoId);
+    const proyectoSnap = await proyectoRef.get();
+
+    if (!proyectoSnap.exists) {
       return { ok: false, mensaje: 'Proyecto no encontrado.' };
     }
 
-    const proyecto = proyectoSnap.data();
+    const proyecto = proyectoSnap.data()!;
 
     // 1a. Autorización RBAC: el ejecutor debe poseer el permiso DISTRIBUIR_GANANCIAS.
     //     Se combina la propiedad del proyecto (gestorId) con los roles del usuario.
     const esGestorDelProyecto = proyecto.gestorId === gestorUid;
-    const usuarioSnap = await getDoc(doc(db, 'usuarios', gestorUid));
+    const usuarioSnap = await db.collection('usuarios').doc(gestorUid).get();
     const ejecutor = construirUsuarioRBAC(
       gestorUid,
-      usuarioSnap.exists() ? usuarioSnap.data() : undefined,
+      usuarioSnap.exists ? usuarioSnap.data() : undefined,
       esGestorDelProyecto
     );
 
@@ -134,12 +141,11 @@ export async function ejecutarDistribucionAction(
     }
 
     // 2. Obtener inversiones confirmadas del proyecto
-    const inversionesQuery = query(
-      collection(db, 'inversiones'),
-      where('proyectoId', '==', proyectoId),
-      where('confirmada', '==', true)
-    );
-    const inversionesSnap = await getDocs(inversionesQuery);
+    const inversionesSnap = await db
+      .collection('inversiones')
+      .where('proyectoId', '==', proyectoId)
+      .where('confirmada', '==', true)
+      .get();
     const inversiones = inversionesSnap.docs.map((d) => ({
       id: d.id,
       ...d.data(),
@@ -185,10 +191,10 @@ export async function ejecutarDistribucionAction(
     };
 
     // 6. Persistir en Firestore con batch atómico
-    const batch = writeBatch(db);
+    const batch = db.batch();
 
     // 6a. Crear documento de distribución (inmutable)
-    const distribucionRef = doc(collection(db, 'distribuciones'));
+    const distribucionRef = db.collection('distribuciones').doc();
     batch.set(distribucionRef, distribucionDoc);
 
     // 6b. Marcar el proyecto como liquidado
@@ -205,7 +211,7 @@ export async function ejecutarDistribucionAction(
         (d) => d.data().usuarioId === socioDistrib.usuarioId
       );
       if (invDel) {
-        batch.update(doc(db, 'inversiones', invDel.id), {
+        batch.update(db.collection('inversiones').doc(invDel.id), {
           gananciaReal: socioDistrib.gananciaDistribuida,
           roiReal: parseFloat(
             ((socioDistrib.gananciaDistribuida / socioDistrib.montoInvertido) * 100).toFixed(2)

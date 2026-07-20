@@ -50,7 +50,8 @@ function ModalLiquidacion({
     if (!usuario) return;
 
     setLoading(true);
-    const result = await ejecutarDistribucionAction(proyecto.id, utilidad, usuario.uid);
+    const idToken = await usuario.getIdToken();
+    const result = await ejecutarDistribucionAction(proyecto.id, utilidad, idToken);
     setLoading(false);
 
     if (result.ok) {

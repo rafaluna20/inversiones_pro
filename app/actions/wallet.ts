@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { TransferSchema } from '@/lib/schemas';
+import { getAdminAuth } from '@/lib/firebase/admin';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_WALLET_API_URL || '';
 const ODOO_DB = process.env.NEXT_PUBLIC_ODOO_DB || 'odoo_akallpav1';
@@ -188,20 +189,29 @@ export async function loadPlatformBalanceAction(amount: number, firebaseUid: str
  * ─────────────────────────────────────────────────────────────────────────────
  * Orquesta el puente inverso: Retira saldo de la Plataforma (Firebase)
  * y lo deposita en la Billetera (Odoo).
- * 
+ *
+ * `idToken` se verifica con Firebase Admin SDK antes de tocar cualquier
+ * saldo — antes esta función confiaba en un `firebaseUid` que el cliente
+ * enviaba sin ninguna verificación (cualquiera podía llamarla desde la
+ * consola del navegador pasando el uid de otra persona).
+ *
  * Flujo interno:
  * 1. Llama a descontarParaRetiro() en Firebase (asegura fondos).
  * 2. Llama a POST /api/wallet/platform-withdraw en Odoo.
  * 3. Si Odoo responde OK -> confirma en Firebase.
  * 4. Si Odoo falla -> hace rollback en Firebase devolviendo los fondos.
  */
-export async function withdrawFromPlatformAction(amount: number, firebaseUid: string) {
+export async function withdrawFromPlatformAction(amount: number, idToken: string) {
     if (amount <= 0) {
         return { success: false, message: 'El monto debe ser mayor a 0' };
     }
 
-    if (!firebaseUid) {
-        return { success: false, message: 'No se pudo identificar tu cuenta de plataforma' };
+    let firebaseUid: string;
+    try {
+        const decoded = await getAdminAuth().verifyIdToken(idToken);
+        firebaseUid = decoded.uid;
+    } catch {
+        return { success: false, message: 'Sesión inválida o expirada. Vuelve a iniciar sesión.' };
     }
 
     // Generar ID único de transacción en Firebase
