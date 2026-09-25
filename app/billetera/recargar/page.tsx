@@ -80,42 +80,34 @@ export default function RecargarBilleteraPage() {
     const toastId = showToast.loading('Procesando carga...');
 
     try {
-      const { loadPlatformBalanceAction } = await import('@/app/actions/wallet');
-      const odooResult = await loadPlatformBalanceAction(montoNum, usuario.uid);
-
-      if (!odooResult.success) {
-        showToast.dismiss(String(toastId));
-        setError(odooResult.message || 'Error al cargar saldo');
-        showToast.error(odooResult.message || 'Error al cargar saldo');
-        setProcessing(false);
-        return;
-      }
-
-      // Odoo debitó exitosamente. Ahora acreditamos en Firebase desde el CLIENTE
-      const transactionId = (odooResult as any).transaction_id;
-      const amountDebited = (odooResult as any).amount;
-
-      const { default: acreditarDesdeBilletera } = await import('@/Validacion/acreditarDesdeBilletera');
-      const firebaseResult = await acreditarDesdeBilletera(usuario.uid, amountDebited, transactionId);
+      // Todo el puente (débito en Odoo + crédito en la plataforma) ocurre en
+      // el SERVIDOR: el navegador ya no escribe saldo en Firestore.
+      const idToken = await usuario.getIdToken();
+      const { cargarAPlataformaAction } = await import('@/app/actions/plataforma-saldo');
+      const resultado = await cargarAPlataformaAction(idToken, montoNum);
 
       showToast.dismiss(String(toastId));
 
-      if (firebaseResult.success) {
-        setSuccess(firebaseResult.already_applied
+      if (resultado.ok) {
+        setSuccess(resultado.yaAplicada
           ? 'Esta carga ya fue aplicada anteriormente'
-          : `¡S/ ${amountDebited.toFixed(2)} cargados exitosamente!`);
+          : `¡S/ ${montoNum.toFixed(2)} cargados exitosamente!`);
         setMonto('');
-        setSaldoOdoo(prev => prev !== null ? prev - amountDebited : null);
+        setSaldoOdoo(prev => prev !== null ? prev - montoNum : null);
         showToast.success('¡Saldo cargado!');
         setTimeout(() => router.push('/'), 2000);
-      } else {
-        // Firebase falló, Odoo debitó
+      } else if (resultado.pendiente && resultado.llave) {
+        // No se pudo confirmar/acreditar: se puede reintentar sin riesgo de duplicar.
         setPendingRecovery({
-          transactionId: transactionId,
-          amount: amountDebited,
+          transactionId: resultado.llave,
+          amount: montoNum,
         });
-        setError(firebaseResult.error || 'Error al acreditar en la plataforma');
-        showToast.error('Error al acreditar. Guarda tu código de recuperación.');
+        setError(resultado.mensaje);
+        showToast.error('Carga sin confirmar. Puedes reintentar sin riesgo de duplicar.');
+        setProcessing(false);
+      } else {
+        setError(resultado.mensaje || 'Error al cargar saldo');
+        showToast.error(resultado.mensaje || 'Error al cargar saldo');
         setProcessing(false);
       }
 
@@ -133,25 +125,23 @@ export default function RecargarBilleteraPage() {
     const toastId = showToast.loading('Recuperando crédito...');
 
     try {
-      const { default: acreditarDesdeBilletera } = await import('@/Validacion/acreditarDesdeBilletera');
-      const firebaseResult = await acreditarDesdeBilletera(
-        usuario.uid,
-        pendingRecovery.amount,
-        pendingRecovery.transactionId
-      );
-      
+      const idToken = await usuario.getIdToken();
+      const { completarCargaPendienteAction } = await import('@/app/actions/plataforma-saldo');
+      const resultado = await completarCargaPendienteAction(idToken, pendingRecovery.transactionId);
+
       showToast.dismiss(String(toastId));
 
-      if (firebaseResult.success) {
+      if (resultado.ok) {
         setPendingRecovery(null);
         setError('');
-        setSuccess(firebaseResult.already_applied
+        setSuccess(resultado.yaAplicada
           ? 'Esta transacción ya estaba aplicada'
           : '¡Crédito recuperado!');
         showToast.success('¡Crédito recuperado!');
         setTimeout(() => router.push('/'), 2000);
       } else {
-        showToast.error(firebaseResult.error || 'Error al recuperar');
+        setError(resultado.mensaje);
+        showToast.error(resultado.mensaje || 'Error al recuperar');
         setProcessing(false);
       }
     } catch (err: any) {
@@ -386,12 +376,24 @@ function RecargarModeDemo({ usuario, router }: { usuario: any; router: any }) {
   const handleDemo = async (e: React.FormEvent) => {
     e.preventDefault();
     setProcessing(true);
-    const { doc, updateDoc, increment } = await import('firebase/firestore');
-    const { db } = await import('@/lib/firebase/config');
-    const ref = doc(db, 'usuarios', usuario.uid);
-    await updateDoc(ref, { saldo: increment(parseFloat(monto)) });
-    showToast.success('Saldo Demo añadido');
-    router.push('/');
+    try {
+      // El saldo demo lo acredita el SERVIDOR y solo si el entorno lo permite
+      // (PLATAFORMA_MODO_DEMO=true). Antes esto escribía `saldo` desde el
+      // navegador: cualquiera podía darse el saldo que quisiera.
+      const idToken = await usuario.getIdToken();
+      const { recargaDemoAction } = await import('@/app/actions/plataforma-saldo');
+      const resultado = await recargaDemoAction(idToken, parseFloat(monto));
+
+      if (resultado.ok) {
+        showToast.success('Saldo Demo añadido');
+        router.push('/');
+        return;
+      }
+      showToast.error(resultado.mensaje);
+    } catch (err: any) {
+      showToast.error(err.message || 'Error inesperado');
+    }
+    setProcessing(false);
   };
 
   return (

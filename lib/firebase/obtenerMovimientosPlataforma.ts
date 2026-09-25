@@ -73,17 +73,23 @@ export async function obtenerMovimientosPlataforma(usuarioId: string): Promise<M
     // Procesar cargas
     cargasSnap.forEach((docSnap) => {
       const data = docSnap.data();
-      const fechaObj = normalizarFecha(data.fecha);
+      // Las cargas que registra el servidor tienen `status`: solo 'completed'
+      // acreditó saldo. Las anteriores (sin `status`) ya estaban acreditadas.
+      const estadoCarga =
+        data.status === 'failed' ? 'fallido' : data.status === 'pending' ? 'pendiente' : 'completado';
+      const fechaObj = normalizarFecha(data.fecha ?? data.fecha_inicio);
       movimientos.push({
         id: `carga_${docSnap.id}`,
         tipo: 'recarga',
-        monto: parseFloat(data.amount_credited || 0),
+        monto: parseFloat(data.amount_credited ?? data.amount ?? 0),
         fecha: fechaObj.toISOString(),
         fechaRaw: fechaObj,
-        detalle: data.odoo_transaction_id 
-          ? `Carga de plataforma (${data.odoo_transaction_id})` 
-          : 'Recarga de plataforma',
-        estado: 'completado'
+        detalle: data.tipo === 'demo'
+          ? 'Recarga demo'
+          : data.odoo_transaction_id
+            ? `Carga de plataforma (${data.odoo_transaction_id})`
+            : 'Recarga de plataforma',
+        estado: estadoCarga
       });
     });
 

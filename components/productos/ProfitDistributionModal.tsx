@@ -24,7 +24,9 @@ export default function ProfitDistributionModal({
     precioProyecto,
 }: ProfitDistributionModalProps) {
     const [montoVentaTotal, setMontoVentaTotal] = useState('');
-    const [aportarGanancia, setAportarGanancia] = useState(true);
+    // Desmarcado por defecto: aportar la ganancia crea saldo sin dinero real y el
+    // servidor solo lo permite a administradores o con PLATAFORMA_MODO_DEMO=true.
+    const [aportarGanancia, setAportarGanancia] = useState(false);
     const [processing, setProcessing] = useState(false);
 
     useEffect(() => {
@@ -166,7 +168,7 @@ export default function ProfitDistributionModal({
                                 <div className="text-xs">
                                     <label htmlFor="aportarGanancia" className="font-bold text-white cursor-pointer select-none flex items-center gap-1.5">
                                         <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                                        Simular Aporte de Ganancia Física (+S/ {gananciaNeta.toLocaleString('es-PE', { minimumFractionDigits: 2 })})
+                                        Simular Aporte de Ganancia Física (+S/ {gananciaNeta.toLocaleString('es-PE', { minimumFractionDigits: 2 })}) — solo modo demo / administradores
                                     </label>
                                 </div>
                             </motion.div>

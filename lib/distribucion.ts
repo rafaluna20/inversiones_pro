@@ -166,3 +166,34 @@ export function formatearSoles(n: number): string {
     maximumFractionDigits: 2,
   })}`;
 }
+
+/**
+ * Reparte `totalCentavos` (entero) entre partes proporcionales a `pesos` por
+ * el método del mayor resto. La suma del resultado es EXACTAMENTE
+ * `totalCentavos`: no se crean ni se pierden céntimos por redondear cada
+ * parte por separado. Devuelve las partes en el mismo orden que `pesos`.
+ */
+export function repartirEnCentavos(totalCentavos: number, pesos: number[]): number[] {
+  if (!Number.isInteger(totalCentavos) || totalCentavos < 0) {
+    throw new Error('totalCentavos debe ser un entero mayor o igual a 0.');
+  }
+  if (pesos.length === 0) return [];
+  if (pesos.some((p) => !Number.isFinite(p) || p < 0)) {
+    throw new Error('Los pesos deben ser números finitos mayores o iguales a 0.');
+  }
+  const sumaPesos = pesos.reduce((acc, p) => acc + p, 0);
+  if (sumaPesos <= 0) throw new Error('La suma de los pesos debe ser mayor a 0.');
+
+  // Se redondea a 9 decimales para eliminar el ruido de coma flotante antes de separar entero y resto.
+  const exactos = pesos.map((p) => Math.round(totalCentavos * (p / sumaPesos) * 1e9) / 1e9);
+  const partes = exactos.map((e) => Math.floor(e));
+  let restante = totalCentavos - partes.reduce((acc, p) => acc + p, 0);
+
+  const orden = exactos
+    .map((e, i) => ({ i, resto: e - Math.floor(e) }))
+    .sort((a, b) => b.resto - a.resto || a.i - b.i);
+  for (let k = 0; restante > 0 && k < orden.length; k++, restante--) {
+    partes[orden[k].i] += 1;
+  }
+  return partes;
+}

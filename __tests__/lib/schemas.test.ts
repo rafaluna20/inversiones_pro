@@ -70,10 +70,17 @@ describe('validarCrearUsuarioBilletera', () => {
   test('no exige nombre/email (comportamiento original preservado)', () => {
     const errores = validarCrearUsuarioBilletera({
       apellido: 'Pérez',
-      password: '123456',
+      password: '12345678',
       telefono: '987654321',
     });
     expect(errores).toEqual({});
+  });
+
+  test('el password de la billetera exige mínimo 8 caracteres (igual que wallet_digital)', () => {
+    const base = { apellido: 'Pérez', telefono: '987654321' };
+    expect(validarCrearUsuarioBilletera({ ...base, password: '1234567' }).password).toBeTruthy();
+    expect(validarCrearUsuarioBilletera({ ...base, password: '12345678' }).password).toBeUndefined();
+    expect(validarCrearUsuarioBilletera({ ...base, password: 'a'.repeat(129) }).password).toBeTruthy();
   });
 
   test('exige apellido, password y teléfono', () => {

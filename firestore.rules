@@ -116,6 +116,22 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(campos);
     }
 
+    // Campos de un PRODUCTO que mueven o determinan dinero: son de solo-servidor
+    // (Admin SDK: invertir, liquidar, depositar recaudado). Antes el gestor podia
+    // editarlos desde el navegador: bajar `precio` despues de recaudar para pagar
+    // menos capital al liquidar, subirse `comisionGestor`, borrar inversores, o
+    // volver `depositoRecaudado` a false. `precio` y `comisionGestor` solo se
+    // pueden cambiar mientras NO haya inversores (la "regla de oro" de la app).
+    function camposMonetariosIntactos() {
+      return camposNoModificados([
+          'inversores', 'estado', 'monto', 'depositoRecaudado',
+          'distribucionEjecutada', 'utilidadNeta', 'fechaDistribucion',
+          'creador', 'gestorId'
+        ])
+        && (resource.data.get('inversores', []).size() == 0
+            || camposNoModificados(['precio', 'comisionGestor']));
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // USUARIOS
     // ─────────────────────────────────────────────────────────────────
@@ -141,14 +157,17 @@ service cloud.firestore {
       // antes de leer el valor, evitando el error.
       allow create: if isSelf(uid)
         && request.resource.data.saldo == 0
+        && request.resource.data.get('saldoRecaudado', []).size() == 0
         && (!('roles' in request.resource.data) || request.resource.data.roles == ['usuario']);
 
-      // El dueño puede actualizar su propio doc (incluido `saldo`, que
-      // Validacion/acreditarDesdeBilletera.ts sigue escribiendo desde el
-      // cliente al recargar billetera) — pero nunca sus propios roles,
-      // permisos o email.
+      // El dueño puede actualizar su propio doc, pero NUNCA su saldo ni sus
+      // roles/permisos/email. `saldo` y `saldoRecaudado` son de solo-servidor
+      // (app/actions/plataforma-saldo.ts, inversion.ts, distribucion.ts, wallet.ts):
+      // antes esta regla dejaba al dueño escribir `saldo` porque la recarga se
+      // acreditaba desde el navegador, y cualquiera podia fijarse el saldo que
+      // quisiera desde la consola y retirarlo a su billetera.
       allow update: if (isSelf(uid) || isAdmin())
-        && camposNoModificados(['roles', 'permisosAdicionales', 'permisosRevocados', 'email']);
+        && camposNoModificados(['roles', 'permisosAdicionales', 'permisosRevocados', 'email', 'saldo', 'saldoRecaudado']);
 
       allow delete: if false;
     }
@@ -169,12 +188,19 @@ service cloud.firestore {
       // Igual que hoy: catálogo público, cualquiera puede leer.
       allow read: if true;
 
-      allow create: if signedIn() && request.resource.data.creador.id == request.auth.uid;
+      // Un producto nace sin inversores, abierto y sin dinero recaudado: no se
+      // puede crear uno "ya liquidado" o con inversores inventados.
+      allow create: if signedIn() && request.resource.data.creador.id == request.auth.uid
+        && request.resource.data.get('inversores', []).size() == 0
+        && request.resource.data.get('estado', true) == true
+        && request.resource.data.get('monto', 0) == 0
+        && request.resource.data.get('depositoRecaudado', false) == false
+        && request.resource.data.get('distribucionEjecutada', false) == false;
 
       // El dueño/gestor puede editar todo. Cualquier otro usuario
       // autenticado SOLO puede tocar votos/haVotado/comentarios (votar y
       // comentar) — no precio, no inversores, no estado, no nada financiero.
-      allow update: if esGestorDelProyecto(proyectoId)
+      allow update: if (esGestorDelProyecto(proyectoId) && camposMonetariosIntactos())
         || (signedIn() && soloEstosCampos(['votos', 'haVotado', 'comentarios']));
 
       allow delete: if esGestorDelProyecto(proyectoId) || isAdmin();
@@ -236,17 +262,24 @@ service cloud.firestore {
     // ─────────────────────────────────────────────────────────────────
     // PUENTE ODOO ↔ FIREBASE (journal de idempotencia)
     // ─────────────────────────────────────────────────────────────────
+    // SOLO SERVIDOR (Admin SDK): el usuario unicamente puede LEER sus propios
+    // registros. Antes podia crearlos (y actualizar los de retiros) desde el
+    // navegador; con `amount` editable en un retiro 'pending', la recuperacion
+    // de retiros habria acreditado en Odoo un monto elegido por el usuario.
     match /plataforma_cargas/{transactionId} {
       allow read: if signedIn() && resource.data.firebase_uid == request.auth.uid || isAdmin();
-      allow create: if signedIn() && request.resource.data.firebase_uid == request.auth.uid;
-      allow update, delete: if false;
+      allow write: if false;
     }
 
     match /plataforma_retiros/{transactionId} {
       allow read: if signedIn() && resource.data.firebase_uid == request.auth.uid || isAdmin();
-      allow create: if signedIn() && request.resource.data.firebase_uid == request.auth.uid;
-      allow update: if signedIn() && resource.data.firebase_uid == request.auth.uid;
-      allow delete: if false;
+      allow write: if false;
+    }
+
+    match /plataforma_transferencias/{transferenciaId} {
+      allow read: if signedIn() && (resource.data.origen_uid == request.auth.uid
+        || resource.data.destino_uid == request.auth.uid) || isAdmin();
+      allow write: if false;
     }
 
     // ─────────────────────────────────────────────────────────────────
