@@ -3,10 +3,15 @@
 import { cookies } from 'next/headers';
 import { TransferSchema } from '@/lib/schemas';
 import { verificarIdToken, mensajeErrorVerificacion } from '@/lib/firebase/admin';
+import {
+    clasificarRespuestaMovimiento,
+    COOKIE_SESION_BILLETERA,
+    llamarBilleteraOdoo,
+} from '@/lib/odoo-wallet';
+import { validarMonto } from '@/lib/plataforma-saldo';
+import { llamarBancoFirmado } from '@/lib/wallet-signature';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_WALLET_API_URL || '';
-const ODOO_DB = process.env.NEXT_PUBLIC_ODOO_DB || 'odoo_akallpav1';
-const COOKIE_NAME = 'billetera_session';
+const COOKIE_NAME = COOKIE_SESION_BILLETERA;
 
 async function getOdooToken() {
     return cookies().get(COOKIE_NAME)?.value;
@@ -19,43 +24,7 @@ async function odooCall(endpoint: string, params: any = {}) {
         return { error: { message: 'No autenticado en la billetera' } };
     }
 
-    if (!API_BASE_URL) {
-        console.error('[Odoo] NEXT_PUBLIC_WALLET_API_URL no está configurada en las variables de entorno.');
-        return { error: { message: 'Servicio de billetera no configurado. Contacta al administrador.' } };
-    }
-
-    // Timeout de 15 segundos para evitar que la UI quede colgada
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-    try {
-        const response = await fetch(`${API_BASE_URL}${endpoint}?db=${ODOO_DB}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'call',
-                params,
-                id: Math.floor(Math.random() * 1000),
-            }),
-            cache: 'no-store',
-            signal: controller.signal,
-        });
-
-        clearTimeout(timeoutId);
-        return await response.json();
-    } catch (error: any) {
-        clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-            console.error(`Odoo Timeout [${endpoint}]: La solicitud tardó más de 15 segundos`);
-            return { error: { message: 'El servidor tardó demasiado en responder. Intenta de nuevo.' } };
-        }
-        console.error(`Odoo Transaction Error [${endpoint}]:`, error);
-        return { error: { message: 'Error de conexión con el servidor' } };
-    }
+    return llamarBilleteraOdoo(endpoint, params, token);
 }
 
 export async function getWalletDataAction() {
@@ -93,7 +62,7 @@ export async function transferMoneyAction(destination: string, amount: number) {
     if (dest.includes('@')) {
         params.destination_email = dest;
     } else if (/^\d+$/.test(dest)) {
-        // Assuming numeric string is account number or ID. 
+        // Assuming numeric string is account number or ID.
         params.destination_account_number = dest;
     } else {
         // Fallback or specific logic
@@ -135,53 +104,22 @@ export async function withdrawMoneyAction(amount: number, method: string = 'bank
     };
 }
 
-/**
- * loadPlatformBalanceAction
- * ─────────────────────────────────────────────────────────────────────────────
- * Paso 1 del puente: Debita de la Billetera Odoo.
- * (El paso 2 de acreditar en Firebase DEBE hacerse en el cliente para tener Auth).
- */
-export async function loadPlatformBalanceAction(amount: number, firebaseUid: string) {
-    if (amount < 10) {
-        return { success: false, message: 'El monto mínimo de carga es S/ 10.00' };
-    }
+// La CARGA a la plataforma (billetera → saldo de plataforma) vive en
+// app/actions/plataforma-saldo.ts (cargarAPlataformaAction): allí el débito en
+// Odoo y el crédito en Firestore ocurren juntos, en el servidor. Antes este
+// archivo solo hacía el débito y dejaba el crédito al navegador.
 
-    if (!firebaseUid) {
-        return { success: false, message: 'No se pudo identificar tu cuenta de plataforma' };
-    }
-
-    const idempotencyKey = `PLAT-${firebaseUid}-${Date.now()}`;
-
-    const odooResponse = await odooCall('/api/wallet/platform-load', {
-        amount,
-        firebase_uid: firebaseUid,
-        platform: 'inversiones_pro',
-        idempotency_key: idempotencyKey,
-    });
-
-    if (odooResponse.error) {
-        return {
-            success: false,
-            message: odooResponse.error?.data?.message || odooResponse.error?.message || 'Error al conectar con la billetera'
-        };
-    }
-
-    const odooResult = odooResponse.result;
-
-    if (!odooResult?.success) {
-        return {
-            success: false,
-            message: odooResult?.error || 'Error al procesar en la billetera digital'
-        };
-    }
-
-    // Retornamos éxito de Odoo y el transactionId para que el cliente acredite en Firebase
-    return {
-        success: true,
-        transaction_id: odooResult.transaction_id,
-        amount: odooResult.amount,
-        message: 'Débito exitoso en Odoo',
-    };
+/** Resultado de un retiro de la plataforma hacia la billetera (y de su recuperación). */
+export interface ResultadoRetiroPlataforma {
+    success: boolean;
+    message: string;
+    transaction_id?: string;
+    amount?: number;
+    new_wallet_balance?: number;
+    new_platform_balance?: number;
+    /** Odoo no confirmó ni rechazó: el saldo quedó retenido; se resuelve con completarRetiroPendienteAction. */
+    pending?: boolean;
+    critical_error?: boolean;
 }
 
 /**
@@ -198,13 +136,23 @@ export async function loadPlatformBalanceAction(amount: number, firebaseUid: str
  * Flujo interno:
  * 1. Llama a descontarParaRetiro() en Firebase (asegura fondos).
  * 2. Llama a POST /api/wallet/platform-withdraw en Odoo.
- * 3. Si Odoo responde OK -> confirma en Firebase.
- * 4. Si Odoo falla -> hace rollback en Firebase devolviendo los fondos.
+ * 3. Según la respuesta de Odoo (ver clasificarRespuestaMovimiento):
+ *    - confirmó        → marca el retiro como completado.
+ *    - rechazó         → devuelve los fondos en Firebase (rollback).
+ *    - NO SE SABE (timeout / error de red): deja el retiro 'pending' con los
+ *      fondos retenidos. Antes esto también hacía rollback, lo que CREABA
+ *      dinero cuando Odoo sí había aplicado el retiro pero la respuesta se
+ *      perdió (el usuario recuperaba el saldo en Firebase Y lo tenía en Odoo).
+ *      Se resuelve con completarRetiroPendienteAction (idempotente) o la
+ *      reconciliación.
  */
-export async function withdrawFromPlatformAction(amount: number, idToken: string) {
-    if (amount <= 0) {
-        return { success: false, message: 'El monto debe ser mayor a 0' };
+export async function withdrawFromPlatformAction(amountSolicitado: number, idToken: string): Promise<ResultadoRetiroPlataforma> {
+    // Nunca confiar en la validación del formulario: NaN, negativos o más de 2 decimales.
+    const validacion = validarMonto(amountSolicitado);
+    if (!validacion.ok) {
+        return { success: false, message: validacion.error };
     }
+    const amount = validacion.monto;
 
     let firebaseUid: string;
     try {
@@ -218,56 +166,149 @@ export async function withdrawFromPlatformAction(amount: number, idToken: string
     const transactionId = `WTH-${firebaseUid}-${Date.now()}`;
 
     // ── PASO 1: Descontar de Firebase ───────────────────────────────────────
-    const { descontarParaRetiro, revertirRetiro, confirmarRetiroExitoso } = await import('@/Validacion/retirarHaciaBilletera');
-    
+    const { descontarParaRetiro } = await import('@/Validacion/retirarHaciaBilletera');
+
     const fbResult = await descontarParaRetiro(firebaseUid, amount, transactionId);
-    
+
     if (!fbResult.success) {
         return { success: false, message: fbResult.error || 'Error al descontar saldo de la plataforma' };
     }
 
-    // ── PASO 2: Depositar en Odoo ───────────────────────────────────────────
-    const odooResponse = await odooCall('/api/wallet/platform-withdraw', {
+    // ── PASO 2 y 3: Depositar en Odoo y resolver según su respuesta ─────────
+    return resolverRetiro({
+        firebaseUid,
         amount,
-        firebase_uid: firebaseUid,
-        idempotency_key: transactionId,
+        transactionId,
+        nuevoSaldoPlataforma: fbResult.newBalance,
     });
+}
 
-    const odooResult = odooResponse.result;
+/**
+ * Cuenta de billetera (WAL...) del usuario de ESTA sesión (la que abrió con su token en `billetera_session`).
+ * El pago a Odoo (`/platform/payout`) lo firma la plataforma, no el usuario — pero el DESTINO tiene que ser SU
+ * cuenta, nunca una que el cliente pueda declarar: por eso se obtiene aquí, del banco, con su propio token.
+ */
+async function cuentaDelUsuario(): Promise<{ ok: true; numero: string } | { ok: false; mensaje: string }> {
+    const respuesta = await odooCall('/api/wallet/account');
+    const numero = respuesta.result?.success ? respuesta.result?.account?.number : undefined;
+    if (typeof numero !== 'string' || !numero) {
+        return { ok: false, mensaje: 'No autenticado en la billetera. Conéctala primero.' };
+    }
+    return { ok: true, numero };
+}
 
-    if (odooResponse.error || !odooResult?.success) {
-        const errorMsg = odooResponse.error?.data?.message || odooResponse.error?.message || odooResult?.error || 'Error en la billetera Odoo';
-        
-        // ── PASO 3 (Fallo): Hacer Rollback en Firebase ──────────────────────
-        console.warn(`[Bridge Withdraw] Odoo falló. Iniciando rollback para TxID: ${transactionId}. Motivo: ${errorMsg}`);
-        
-        const rollbackResult = await revertirRetiro(firebaseUid, amount, transactionId, errorMsg);
-        
+/**
+ * Llama al banco con la clave de idempotencia del retiro y cierra el registro según la respuesta. Compartido por
+ * el retiro nuevo y por la recuperación.
+ *
+ * El pago (`/platform/payout`) lo firma esta plataforma con su secreto — el banco NUNCA acepta que el destino de un
+ * pago lo declare quien llama sin firma (por eso se retiró /platform-withdraw, que acreditaba a cualquiera con el
+ * monto que él mismo mandaba).
+ */
+async function resolverRetiro(p: {
+    firebaseUid: string;
+    amount: number;
+    transactionId: string;
+    nuevoSaldoPlataforma?: number;
+}): Promise<ResultadoRetiroPlataforma> {
+    const { revertirRetiro, confirmarRetiroExitoso } = await import('@/Validacion/retirarHaciaBilletera');
+
+    const cuenta = await cuentaDelUsuario();
+    if (!cuenta.ok) {
+        // Nunca se llegó a llamar al banco (no sabemos a qué cuenta pagar): es seguro devolver el dinero YA, en vez
+        // de dejarlo 'pending' esperando una reconexión que puede no llegar pronto.
+        const rollbackResult = await revertirRetiro(p.firebaseUid, p.amount, p.transactionId, cuenta.mensaje);
         if (!rollbackResult.success) {
-            console.error(`[Bridge Withdraw] CRÍTICO: Rollback falló. El usuario perdió S/${amount}. Contactar a soporte. TxID: ${transactionId}`);
+            console.error(`[Bridge Withdraw] CRÍTICO: Rollback falló (sin cuenta de banco). TxID: ${p.transactionId}`);
+            return {
+                success: false, critical_error: true, transaction_id: p.transactionId,
+                message: `Hubo un error grave. Tu dinero está seguro pero requiere revisión manual. Código: ${p.transactionId}`,
+            };
+        }
+        return { success: false, message: cuenta.mensaje };
+    }
+
+    const movimiento = clasificarRespuestaMovimiento(
+        await llamarBancoFirmado('/api/wallet/platform/payout', {
+            account_number: cuenta.numero,
+            amount: p.amount,
+            idempotency_key: p.transactionId,
+            description: 'Retiro desde Inversiones Pro',
+        })
+    );
+
+    if (movimiento.estado === 'ok') {
+        await confirmarRetiroExitoso(p.transactionId, movimiento.transactionId);
+        return {
+            success: true,
+            transaction_id: p.transactionId,
+            amount: p.amount,
+            new_wallet_balance: movimiento.nuevoSaldo,
+            new_platform_balance: p.nuevoSaldoPlataforma,
+            message: `¡Retiro exitoso! S/ ${p.amount.toFixed(2)} fueron transferidos a tu Billetera.`,
+        };
+    }
+
+    if (movimiento.estado === 'rechazada') {
+        // Odoo confirmó que NO aplicó el retiro: es seguro devolver los fondos.
+        console.warn(`[Bridge Withdraw] Odoo rechazó. Iniciando rollback para TxID: ${p.transactionId}. Motivo: ${movimiento.mensaje}`);
+
+        const rollbackResult = await revertirRetiro(p.firebaseUid, p.amount, p.transactionId, movimiento.mensaje);
+
+        if (!rollbackResult.success) {
+            console.error(`[Bridge Withdraw] CRÍTICO: Rollback falló. El usuario perdió S/${p.amount}. Contactar a soporte. TxID: ${p.transactionId}`);
             return {
                 success: false,
                 critical_error: true,
-                transaction_id: transactionId,
-                message: `Hubo un error de conexión grave. Tu dinero está seguro pero requiere revisión manual. Código: ${transactionId}`,
+                transaction_id: p.transactionId,
+                message: `Hubo un error de conexión grave. Tu dinero está seguro pero requiere revisión manual. Código: ${p.transactionId}`,
             };
         }
 
         return {
             success: false,
-            message: `El retiro falló y el dinero fue devuelto a tu plataforma. Motivo: ${errorMsg}`,
+            message: `El retiro falló y el dinero fue devuelto a tu plataforma. Motivo: ${movimiento.mensaje}`,
         };
     }
 
-    // ── PASO 3 (Éxito): Marcar como completado ──────────────────────────────
-    await confirmarRetiroExitoso(transactionId, odooResult.transaction_id);
-
+    // Indeterminado: NO se revierte. Los fondos quedan retenidos ('pending').
+    console.warn(`[Bridge Withdraw] Sin confirmación de Odoo (${movimiento.mensaje}). Retiro queda 'pending' TxID: ${p.transactionId}`);
     return {
-        success: true,
-        transaction_id: transactionId,
-        amount: amount,
-        new_wallet_balance: odooResult.new_balance,
-        new_platform_balance: fbResult.newBalance,
-        message: `¡Retiro exitoso! S/ ${amount.toFixed(2)} fueron transferidos a tu Billetera.`,
+        success: false,
+        pending: true,
+        transaction_id: p.transactionId,
+        message: `No pudimos confirmar tu retiro con la billetera. Tu saldo quedó retenido mientras lo verificamos. No repitas el retiro. Código: ${p.transactionId}`,
     };
+}
+
+/**
+ * Retoma un retiro que quedó 'pending' (sin confirmación de Odoo). Es seguro
+ * llamarla varias veces: reutiliza la MISMA clave de idempotencia y el monto
+ * GUARDADO en el registro del retiro, nunca uno enviado ahora.
+ */
+export async function completarRetiroPendienteAction(idToken: string, transactionId: string): Promise<ResultadoRetiroPlataforma> {
+    let firebaseUid: string;
+    try {
+        const decoded = await verificarIdToken(idToken);
+        firebaseUid = decoded.uid;
+    } catch (error) {
+        return { success: false, message: mensajeErrorVerificacion(error) };
+    }
+
+    if (typeof transactionId !== 'string' || !/^WTH-[A-Za-z0-9_-]{4,200}$/.test(transactionId)) {
+        return { success: false, message: 'Código de retiro inválido.' };
+    }
+
+    const { getAdminDb } = await import('@/lib/firebase/admin');
+    const snap = await getAdminDb().collection('plataforma_retiros').doc(transactionId).get();
+    const data = snap.data();
+
+    if (!snap.exists || !data || data.firebase_uid !== firebaseUid) {
+        return { success: false, message: 'No se encontró ese retiro.' };
+    }
+    if (data.status !== 'pending') {
+        return { success: false, message: `Este retiro ya está en estado "${data.status}".` };
+    }
+
+    return resolverRetiro({ firebaseUid, amount: Number(data.amount), transactionId });
 }

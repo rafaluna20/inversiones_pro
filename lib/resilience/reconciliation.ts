@@ -26,6 +26,8 @@ import {
   detectarInversionesSinTransaccionOdoo,
   detectarDesincronizacionDeMontos,
   detectarRetirosAtascados,
+  detectarCargasAtascadas,
+  type CargaPendienteResumen,
   type ReconciliationIssue,
   type InversionResumen,
   type ProyectoResumen,
@@ -121,6 +123,19 @@ export async function reconcileOdooFirebase(autoFix: boolean = false): Promise<R
       };
     });
     issues.push(...detectarRetirosAtascados(retiros));
+
+    // 4. Cargas a la plataforma que quedaron a medias (Odoo pudo debitar sin acreditar).
+    const cargasSnap = await db.collection('plataforma_cargas').where('status', '==', 'pending').get();
+    const cargas: CargaPendienteResumen[] = cargasSnap.docs.map((d) => {
+      const data = d.data();
+      return {
+        transactionId: d.id,
+        firebaseUid: data.firebase_uid,
+        amount: data.amount || 0,
+        fechaInicioMs: data.fecha_inicio ? new Date(data.fecha_inicio).getTime() : 0,
+      };
+    });
+    issues.push(...detectarCargasAtascadas(cargas));
 
     const duration = Date.now() - startTime;
     const summary = {

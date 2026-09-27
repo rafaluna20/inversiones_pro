@@ -26,6 +26,8 @@ import {
   mensajeErrorVerificacion,
   type UsuarioVerificado,
 } from '@/lib/firebase/admin';
+import { repartirEnCentavos } from '@/lib/distribucion';
+import { modoDemoHabilitado } from '@/lib/plataforma-saldo';
 
 export interface InversionData {
   descripcion: string;
@@ -46,6 +48,31 @@ interface Inversor {
 export interface AccionInversionResult {
   ok: boolean;
   mensaje: string;
+}
+
+/**
+ * Un proyecto deja de aceptar cambios en sus inversiones cuando ya se
+ * liquidó o cuando el creador ya retiró lo recaudado. Antes NADA de esto se
+ * validaba en el servidor (solo la interfaz escondía el botón), y provocaba
+ * dos pérdidas de integridad reales:
+ *  - eliminar la inversión DESPUÉS de que el creador depositó lo recaudado
+ *    devolvía el dinero al inversor sin descontárselo a nadie (dinero creado);
+ *  - invertir DESPUÉS del depósito dejaba ese dinero atrapado en
+ *    `saldoRecaudado`, porque `depositoRecaudado` ya estaba en true.
+ */
+function motivoProyectoCerrado(p: Record<string, any>): string | null {
+  if (p.estado === false || p.distribucionEjecutada === true) {
+    return 'Este proyecto ya fue liquidado; no admite cambios en las inversiones.';
+  }
+  if (p.depositoRecaudado === true) {
+    return 'El creador ya retiró los fondos recaudados; no admite cambios en las inversiones.';
+  }
+  return null;
+}
+
+/** ¿Los `roles` guardados en el perfil incluyen admin? (Solo el servidor/admin puede asignarlos: ver firestore.rules.) */
+function esAdministrador(roles: unknown): boolean {
+  return Array.isArray(roles) && (roles.includes('admin') || roles.includes('super_admin'));
 }
 
 function actualizarSaldoRecaudado(
@@ -100,6 +127,9 @@ export async function invertirEnProyectoAction(
       const creadorId: string | undefined = productoData.creador?.id;
 
       if (!creadorId) return { ok: false, mensaje: 'Proyecto sin creador válido' };
+
+      const cerrado = motivoProyectoCerrado(productoData);
+      if (cerrado) return { ok: false, mensaje: cerrado };
 
       if (productoData.fechaLimite && Date.now() > productoData.fechaLimite) {
         return { ok: false, mensaje: 'El plazo de recaudación para este proyecto ha expirado.' };
@@ -229,6 +259,9 @@ export async function eliminarInversionAction(
       const creadorId: string | undefined = productoData.creador?.id;
       if (!creadorId) return { ok: false, mensaje: 'Proyecto sin creador válido' };
 
+      const cerrado = motivoProyectoCerrado(productoData);
+      if (cerrado) return { ok: false, mensaje: cerrado };
+
       const inversorFresco = inversoresFrescos.find((inv) => inv.usuarioId === usuario.uid);
       if (!inversorFresco) return { ok: false, mensaje: 'Tu inversión ya no existe en este proyecto.' };
 
@@ -301,6 +334,13 @@ export async function distribuirGananciaLegacyAction(
       const inversoresFrescos: Inversor[] = productoData.inversores || [];
       const precioFresco: number = productoData.precio;
 
+      if (typeof gananciaTotal !== 'number' || !Number.isFinite(gananciaTotal) || gananciaTotal <= 0) {
+        return { ok: false, mensaje: 'La ganancia total debe ser un monto válido mayor a 0.' };
+      }
+      if (Math.abs(gananciaTotal * 100 - Math.round(gananciaTotal * 100)) > 1e-6) {
+        return { ok: false, mensaje: 'La ganancia total solo admite hasta 2 decimales.' };
+      }
+
       if (gananciaTotal < precioFresco) {
         return {
           ok: false,
@@ -315,14 +355,31 @@ export async function distribuirGananciaLegacyAction(
 
       const idsUnicos = Array.from(new Set([usuario.uid, ...inversoresFrescos.map((inv) => inv.usuarioId)]));
       const saldoBasePorUid = new Map<string, number>();
+      let rolesCreador: unknown;
       for (const id of idsUnicos) {
         const snap = id === usuario.uid ? await tx.get(creadorDocRef) : await tx.get(db.collection('usuarios').doc(id));
         if (!snap.exists) return { ok: false, mensaje: `Usuario ${id} no encontrado` };
         saldoBasePorUid.set(id, snap.data()!.saldo || 0);
+        if (id === usuario.uid) rolesCreador = snap.data()!.roles;
       }
 
       const saldoCreadorBase = saldoBasePorUid.get(usuario.uid) || 0;
       const gananciaNeta = gananciaTotal - precioFresco;
+
+      // `aportarGanancia` ACREDITA la ganancia neta sin que entre dinero a la
+      // plataforma: es crear saldo de la nada. Cualquiera podía usarlo: bastaba
+      // crear un proyecto propio con un cómplice como único inversor, poner una
+      // ganancia enorme y marcar la casilla (gastando solo S/ 1 de su saldo).
+      // Ahora solo lo puede hacer un administrador o un entorno de prueba
+      // (PLATAFORMA_MODO_DEMO=true); un creador normal debe tener ese dinero
+      // en su saldo (cargado desde su billetera).
+      if (aportarGanancia && gananciaNeta > 0 && !esAdministrador(rolesCreador) && !modoDemoHabilitado()) {
+        return {
+          ok: false,
+          mensaje:
+            'Solo un administrador puede aportar la ganancia a la plataforma. Carga la ganancia a tu saldo desde tu billetera y vuelve a distribuir.',
+        };
+      }
       const aporte = aportarGanancia && gananciaNeta > 0 ? gananciaNeta : 0;
 
       if (saldoCreadorBase + aporte < gananciaTotal) {
@@ -335,25 +392,23 @@ export async function distribuirGananciaLegacyAction(
 
       addDelta(usuario.uid, aporte - gananciaTotal);
 
-      for (const id of idsUnicos) {
-        if (id === usuario.uid) continue;
-        const cubosDelInversor = inversoresFrescos
-          .filter((inv) => inv.usuarioId === id)
-          .reduce((sum, inv) => sum + inv.cubos, 0);
-        if (cubosDelInversor <= 0) continue;
-        const gananciaInversor = parseFloat(((gananciaTotal * cubosDelInversor) / totalCubos).toFixed(2));
-        addDelta(id, gananciaInversor);
+      // Reparto por el método del mayor resto: la suma de lo pagado es
+      // EXACTAMENTE `gananciaTotal`. Antes cada parte se redondeaba por
+      // separado y se creaban o perdían céntimos en cada liquidación.
+      const cubosPorUid = new Map<string, number>();
+      for (const inv of inversoresFrescos) {
+        cubosPorUid.set(inv.usuarioId, (cubosPorUid.get(inv.usuarioId) || 0) + inv.cubos);
       }
-      const cubosPropios = inversoresFrescos
-        .filter((inv) => inv.usuarioId === usuario.uid)
-        .reduce((sum, inv) => sum + inv.cubos, 0);
-      if (cubosPropios > 0) {
-        addDelta(usuario.uid, parseFloat(((gananciaTotal * cubosPropios) / totalCubos).toFixed(2)));
-      }
+      const uidsConCubos = Array.from(cubosPorUid.keys()).filter((id) => (cubosPorUid.get(id) || 0) > 0);
+      const partesCentavos = repartirEnCentavos(
+        Math.round(gananciaTotal * 100),
+        uidsConCubos.map((id) => cubosPorUid.get(id) || 0)
+      );
+      uidsConCubos.forEach((id, i) => addDelta(id, partesCentavos[i] / 100));
 
       for (const [id, delta] of deltaSaldoPorUid) {
         const ref = id === usuario.uid ? creadorDocRef : db.collection('usuarios').doc(id);
-        tx.update(ref, { saldo: (saldoBasePorUid.get(id) || 0) + delta });
+        tx.update(ref, { saldo: Math.round(((saldoBasePorUid.get(id) || 0) + delta) * 100) / 100 });
       }
       tx.update(docRef, { estado: false, monto: gananciaTotal });
 

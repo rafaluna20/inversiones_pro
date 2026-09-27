@@ -1,0 +1,74 @@
+// ═══════════════════════════════════════════════════════════════════════
+// FIREBASE STORAGE RULES — PROPUESTA (NO desplegada, NO referenciada en firebase.json)
+// ═══════════════════════════════════════════════════════════════════════
+//
+// El repositorio no tenía ningún archivo de reglas de Storage, así que no hay
+// forma de saber (ni de versionar) qué reglas tiene el bucket hoy: si el
+// proyecto se creó en "modo de prueba" quedó abierto a cualquiera, y si esas
+// reglas de prueba vencieron, la subida de imágenes estaría bloqueada.
+//
+// Rutas reales que usa la app (buscadas en el código):
+//   profile_images/{uid}                       crear-cuenta/page.tsx
+//   productos/{timestamp_nombre}               productos/nuevo y productos/editar
+//   proyectos/{proyectoId}/gastos/{archivo}    components/productos/GastosProyecto.tsx
+//
+// ANTES DE DESPLEGAR:
+//   1. Probarlas en Firebase Console → Storage → Reglas → "Simulador de reglas".
+//   2. Subir una foto de perfil, una imagen de proyecto y un comprobante de
+//      gasto en un entorno de prueba y confirmar que siguen funcionando.
+//   3. Agregar en firebase.json:  "storage": { "rules": "storage.rules" }
+//      y desplegar:               firebase deploy --only storage
+//   4. La regla de comprobantes consulta Firestore (firestore.get): Firebase
+//      pide otorgar el permiso "Firebase Rules Firestore Service Agent" al
+//      desplegar por primera vez; la consola lo ofrece automáticamente.
+// ═══════════════════════════════════════════════════════════════════════
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function esImagen() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    // ── Fotos de perfil: se muestran en listas públicas → lectura abierta.
+    // Solo el dueño puede subir/reemplazar/borrar la suya.
+    match /profile_images/{uid} {
+      allow read: if true;
+      allow write: if signedIn() && request.auth.uid == uid
+        && esImagen() && request.resource.size < 5 * 1024 * 1024;
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ── Imágenes de proyectos: catálogo público. Cualquier usuario
+    // autenticado puede subir (al crear/editar un proyecto), pero solo imágenes
+    // de hasta 5 MB y sin poder pisar ni borrar archivos ajenos.
+    match /productos/{archivo} {
+      allow read: if true;
+      allow create: if signedIn() && esImagen() && request.resource.size < 5 * 1024 * 1024;
+      allow update, delete: if false;
+    }
+
+    // ── Comprobantes de gastos: datos financieros del proyecto → solo
+    // usuarios autenticados pueden leerlos, y solo el creador del proyecto
+    // puede subirlos (imagen o PDF, máx. 10 MB). Sin sobrescribir ni borrar.
+    match /proyectos/{proyectoId}/gastos/{archivo} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.size < 10 * 1024 * 1024
+        && (esImagen() || request.resource.contentType == 'application/pdf')
+        && firestore.get(/databases/(default)/documents/productos/$(proyectoId)).data.creador.id == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // ── Todo lo demás: denegado.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

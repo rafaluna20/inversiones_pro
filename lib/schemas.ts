@@ -60,7 +60,10 @@ export const RegistroWalletSchema = z.object({
     password: z
         .string()
         .min(1, 'El password es obligatorio')
-        .min(6, 'El password debe tener 6 caracteres'),
+        // La billetera (wallet_digital) exige mínimo 8 caracteres en su
+        // registro: si acá se aceptaran 6-7, el usuario vería un error del servidor.
+        .min(8, 'El password debe tener al menos 8 caracteres')
+        .max(128, 'El password no puede superar los 128 caracteres'),
     telefono: z
         .string()
         .min(1, 'El telefono es obligatorio')

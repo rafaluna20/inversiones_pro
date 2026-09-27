@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, increment } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import useAutenticacion from '@/Hooks/useAutenticacion';
 import useTokenBilletera from '@/Hooks/useTokenBilletera';
@@ -71,11 +71,13 @@ export default function RetirarBilleteraPage() {
         const { withdrawMoneyAction } = await import('@/app/actions/wallet');
         resultado = await withdrawMoneyAction(montoNum, 'bank', { reason: 'Retiro desde web' });
       } else {
-        const usuarioRef = doc(db, 'usuarios', usuario.uid);
-        await updateDoc(usuarioRef, {
-          saldo: increment(-montoNum),
-        });
-        resultado = { success: true, message: 'Retiro exitoso' };
+        // Retiro "demo" (sin billetera): lo hace el SERVIDOR y solo si el
+        // entorno lo permite (PLATAFORMA_MODO_DEMO=true). Antes el navegador
+        // descontaba `saldo` directamente en Firestore.
+        const idToken = await usuario.getIdToken();
+        const { retiroDemoBancoAction } = await import('@/app/actions/plataforma-saldo');
+        const r = await retiroDemoBancoAction(idToken, montoNum);
+        resultado = { success: r.ok, message: r.mensaje };
       }
 
       showToast.dismiss(String(toastId));

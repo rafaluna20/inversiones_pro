@@ -6,8 +6,10 @@ import { checkRateLimit, obtenerIp, type RateLimitRule } from '@/lib/security/ed
 const COOKIE_NAME = 'billetera_session';
 
 /**
- * Rutas de movimiento de dinero que exigen sesión activa. El acceso también
- * se permite si la ruta trae un `token` en el query string (flujo por enlace).
+ * Rutas de movimiento de dinero que exigen sesión activa (cookie de la
+ * billetera). Ya NO se acepta un `?token=...` en la URL como sustituto: bastaba
+ * agregar cualquier valor (`?token=x`) para saltarse esta comprobación. El
+ * flujo por enlace se eliminó de las pantallas (ver transferir/page.tsx).
  */
 const RUTAS_REQUIEREN_SESION = [
   '/billetera/transferir',
@@ -75,8 +77,7 @@ export function middleware(request: NextRequest) {
   // ========================================
   if (RUTAS_REQUIEREN_SESION.some((r) => path === r || path.startsWith(`${r}/`))) {
     const tieneSesion = Boolean(request.cookies.get(COOKIE_NAME)?.value);
-    const tieneToken = Boolean(searchParams.get('token'));
-    if (!tieneSesion && !tieneToken) {
+    if (!tieneSesion) {
       const url = request.nextUrl.clone();
       url.pathname = '/login';
       url.searchParams.set('redirect', path);

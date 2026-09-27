@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { doc, getDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc, onSnapshot, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import useAutenticacion from '@/Hooks/useAutenticacion';
 import {
@@ -63,6 +63,19 @@ interface Comentario {
   reacciones?: {
     [emoji: string]: string[]; // emoji -> array of userIds
   };
+}
+
+/** `votos` puede ser un array de uids (formato actual) o un número (productos antiguos). */
+function totalVotos(votos: unknown): number {
+  if (Array.isArray(votos)) return votos.length;
+  const n = Number(votos);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** ¿Ya votó este usuario? Se mira tanto `haVotado` como el array `votos`. */
+function yaVotoEsteUsuario(producto: { votos?: unknown; haVotado?: string[] }, uid?: string): boolean {
+  if (!uid) return false;
+  return Boolean(producto.haVotado?.includes(uid)) || (Array.isArray(producto.votos) && producto.votos.includes(uid));
 }
 
 export default function ProductoDetallesPage() {
@@ -132,7 +145,7 @@ export default function ProductoDetallesPage() {
   const votarProducto = async () => {
     if (!usuario || !producto) return;
 
-    if (producto.haVotado?.includes(usuario.uid)) {
+    if (yaVotoEsteUsuario(producto, usuario.uid)) {
       showToast.error('Ya has votado por este producto');
       return;
     }
@@ -146,12 +159,13 @@ export default function ProductoDetallesPage() {
 
     try {
       const docRef = doc(db, 'productos', params.id as string);
-      const nuevoHaVotado = [...(producto.haVotado || []), usuario.uid];
-      const nuevoTotal = (producto.votos || 0) + 1;
-
+      // `votos` es un ARRAY de uids (así lo escribe también ProductCard con
+      // arrayUnion). Antes esta pantalla asumía un número y hacía `votos + 1`:
+      // si `votos` ya era un array, eso lo convertía en un texto ("uid1,uid21")
+      // y corrompía el contador del producto.
       await updateDoc(docRef, {
-        votos: nuevoTotal,
-        haVotado: nuevoHaVotado,
+        votos: arrayUnion(usuario.uid),
+        haVotado: arrayUnion(usuario.uid),
       });
 
       showToast.success('¡Voto registrado!');
@@ -434,7 +448,7 @@ export default function ProductoDetallesPage() {
     );
   }
 
-  const hasVoted = producto.haVotado?.includes(usuario?.uid) || false;
+  const hasVoted = yaVotoEsteUsuario(producto, usuario?.uid);
   const esCreador = usuario?.uid === producto.creador?.id;
   const inversores = producto.inversores || [];
   const esSocio = inversores.some((inv: Inversor) => inv.usuarioId === usuario?.uid);
@@ -573,7 +587,7 @@ export default function ProductoDetallesPage() {
 
                 {/* Stats Bar */}
                 <StatsBar
-                  votos={producto.votos || 0}
+                  votos={totalVotos(producto.votos)}
                   comentarios={producto.comentarios?.length || 0}
                   inversores={inversores.length}
                   ubicacion={producto.coordenadas ? 'Lima, Perú' : undefined}

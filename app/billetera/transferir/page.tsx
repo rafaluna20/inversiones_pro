@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { doc, getDoc, updateDoc, increment, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import useAutenticacion from '@/Hooks/useAutenticacion';
 import useTokenBilletera from '@/Hooks/useTokenBilletera';
@@ -24,6 +24,14 @@ export default function TransferirPage() {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // Identificador único de este intento de transferencia: si el usuario hace
+  // doble clic o se reintenta, el servidor no la aplica dos veces.
+  const intentoIdRef = useRef<string>(
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `intento-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  );
 
   // Token query param support removed
   const tokenActivo = isAuthenticated;
@@ -114,24 +122,18 @@ export default function TransferirPage() {
           montoNum
         );
       } else {
-        // Logica Firebase (Legacy)
-        const usuariosRef = collection(db, 'usuarios');
-        const q = query(usuariosRef, where('email', '==', destinatarioEmail.toLowerCase()));
-        const querySnapshot = await getDocs(q);
-
-        if (querySnapshot.empty) {
-          throw new Error('Usuario destinatario no encontrado');
-        }
-
-        const destinatarioDoc = querySnapshot.docs[0];
-        const destinatarioId = destinatarioDoc.id;
-        const origenRef = doc(db, 'usuarios', usuario.uid);
-        const destinoRef = doc(db, 'usuarios', destinatarioId);
-
-        await updateDoc(origenRef, { saldo: increment(-montoNum) });
-        await updateDoc(destinoRef, { saldo: increment(montoNum) });
-
-        resultado = { success: true, message: 'Transferencia exitosa' };
+        // Transferencia entre usuarios de la plataforma: la hace el SERVIDOR
+        // (atómica y validada). Antes el navegador editaba el saldo de origen
+        // y de destino con dos escrituras sueltas.
+        const idToken = await usuario.getIdToken();
+        const { transferirEntreUsuariosAction } = await import('@/app/actions/plataforma-saldo');
+        const r = await transferirEntreUsuariosAction(
+          idToken,
+          destinatarioEmail.toLowerCase(),
+          montoNum,
+          intentoIdRef.current
+        );
+        resultado = { success: r.ok, message: r.mensaje };
       }
 
       // Cerramos el toast de carga SIEMPRE antes de mostrar resultado

@@ -8,7 +8,13 @@
  */
 
 export interface ReconciliationIssue {
-  type: 'missing_firebase' | 'missing_odoo' | 'monto_mismatch' | 'estado_mismatch' | 'retiro_atascado';
+  type:
+    | 'missing_firebase'
+    | 'missing_odoo'
+    | 'monto_mismatch'
+    | 'estado_mismatch'
+    | 'retiro_atascado'
+    | 'carga_atascada';
   severity: 'critical' | 'high' | 'medium' | 'low';
   inversionId?: string;
   odooTransactionId?: string;
@@ -99,6 +105,41 @@ export function detectarDesincronizacionDeMontos(
       detectedAt: new Date(),
     },
   ];
+}
+
+export interface CargaPendienteResumen {
+  transactionId: string;
+  firebaseUid: string;
+  amount: number;
+  fechaInicioMs: number;
+}
+
+/**
+ * Cargas a la plataforma (billetera → saldo) que llevan demasiado en 'pending'.
+ * Significa que Odoo PUDO haber debitado la billetera del usuario pero la
+ * plataforma todavía no le acreditó el saldo (o que la carga nunca llegó a
+ * Odoo). Se resuelve con completarCargaPendienteAction (idempotente): nunca
+ * acreditar a mano sin antes confirmar en Odoo que el débito existe.
+ */
+export function detectarCargasAtascadas(
+  cargas: CargaPendienteResumen[],
+  ahoraMs: number = Date.now(),
+  umbralMs: number = UMBRAL_RETIRO_ATASCADO_MS
+): ReconciliationIssue[] {
+  return cargas
+    .filter((c) => ahoraMs - c.fechaInicioMs > umbralMs)
+    .map((c) => {
+      const minutos = Math.round((ahoraMs - c.fechaInicioMs) / 60000);
+      return {
+        type: 'carga_atascada' as const,
+        severity: 'critical' as const,
+        usuarioId: c.firebaseUid,
+        transactionId: c.transactionId,
+        description: `Carga TxID=${c.transactionId} (S/ ${c.amount.toFixed(2)}) lleva ${minutos} min en estado 'pending'. Odoo pudo haber debitado la billetera sin que la plataforma haya acreditado el saldo.`,
+        suggestedFix: 'Pedir al usuario que reintente la carga (completarCargaPendienteAction, idempotente) o verificar en Odoo si el débito existe. Si Odoo NO debitó, marcar la carga como fallida.',
+        detectedAt: new Date(),
+      };
+    });
 }
 
 export function detectarRetirosAtascados(

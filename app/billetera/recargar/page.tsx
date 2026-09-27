@@ -19,6 +19,7 @@ export default function RecargarBilleteraPage() {
   const { isAuthenticated } = useTokenBilletera();
 
   const [monto, setMonto] = useState('');
+  const [pin, setPin] = useState('');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -73,6 +74,10 @@ export default function RecargarBilleteraPage() {
       setError(`Saldo insuficiente en tu billetera. Disponible: S/ ${saldoOdoo.toFixed(2)}`);
       return;
     }
+    if (!/^\d{4,6}$/.test(pin)) {
+      setError('Ingresa tu clave de la billetera (4 a 6 dígitos).');
+      return;
+    }
 
     setProcessing(true);
     setError('');
@@ -80,42 +85,36 @@ export default function RecargarBilleteraPage() {
     const toastId = showToast.loading('Procesando carga...');
 
     try {
-      const { loadPlatformBalanceAction } = await import('@/app/actions/wallet');
-      const odooResult = await loadPlatformBalanceAction(montoNum, usuario.uid);
-
-      if (!odooResult.success) {
-        showToast.dismiss(String(toastId));
-        setError(odooResult.message || 'Error al cargar saldo');
-        showToast.error(odooResult.message || 'Error al cargar saldo');
-        setProcessing(false);
-        return;
-      }
-
-      // Odoo debitó exitosamente. Ahora acreditamos en Firebase desde el CLIENTE
-      const transactionId = (odooResult as any).transaction_id;
-      const amountDebited = (odooResult as any).amount;
-
-      const { default: acreditarDesdeBilletera } = await import('@/Validacion/acreditarDesdeBilletera');
-      const firebaseResult = await acreditarDesdeBilletera(usuario.uid, amountDebited, transactionId);
+      // Todo el puente (débito en Odoo + crédito en la plataforma) ocurre en
+      // el SERVIDOR: el navegador ya no escribe saldo en Firestore. La clave
+      // viaja solo por este viaje al servidor: nunca se guarda en el navegador.
+      const idToken = await usuario.getIdToken();
+      const { cargarAPlataformaAction } = await import('@/app/actions/plataforma-saldo');
+      const resultado = await cargarAPlataformaAction(idToken, montoNum, pin);
+      setPin('');
 
       showToast.dismiss(String(toastId));
 
-      if (firebaseResult.success) {
-        setSuccess(firebaseResult.already_applied
+      if (resultado.ok) {
+        setSuccess(resultado.yaAplicada
           ? 'Esta carga ya fue aplicada anteriormente'
-          : `¡S/ ${amountDebited.toFixed(2)} cargados exitosamente!`);
+          : `¡S/ ${montoNum.toFixed(2)} cargados exitosamente!`);
         setMonto('');
-        setSaldoOdoo(prev => prev !== null ? prev - amountDebited : null);
+        setSaldoOdoo(prev => prev !== null ? prev - montoNum : null);
         showToast.success('¡Saldo cargado!');
         setTimeout(() => router.push('/'), 2000);
-      } else {
-        // Firebase falló, Odoo debitó
+      } else if (resultado.pendiente && resultado.llave) {
+        // No se pudo confirmar/acreditar: se puede reintentar sin riesgo de duplicar.
         setPendingRecovery({
-          transactionId: transactionId,
-          amount: amountDebited,
+          transactionId: resultado.llave,
+          amount: montoNum,
         });
-        setError(firebaseResult.error || 'Error al acreditar en la plataforma');
-        showToast.error('Error al acreditar. Guarda tu código de recuperación.');
+        setError(resultado.mensaje);
+        showToast.error('Carga sin confirmar. Puedes reintentar sin riesgo de duplicar.');
+        setProcessing(false);
+      } else {
+        setError(resultado.mensaje || 'Error al cargar saldo');
+        showToast.error(resultado.mensaje || 'Error al cargar saldo');
         setProcessing(false);
       }
 
@@ -129,29 +128,32 @@ export default function RecargarBilleteraPage() {
 
   const handleRecuperacion = async () => {
     if (!pendingRecovery || !usuario) return;
+    if (!/^\d{4,6}$/.test(pin)) {
+      setError('Ingresa tu clave de la billetera para reintentar (4 a 6 dígitos).');
+      return;
+    }
     setProcessing(true);
     const toastId = showToast.loading('Recuperando crédito...');
 
     try {
-      const { default: acreditarDesdeBilletera } = await import('@/Validacion/acreditarDesdeBilletera');
-      const firebaseResult = await acreditarDesdeBilletera(
-        usuario.uid,
-        pendingRecovery.amount,
-        pendingRecovery.transactionId
-      );
-      
+      const idToken = await usuario.getIdToken();
+      const { completarCargaPendienteAction } = await import('@/app/actions/plataforma-saldo');
+      const resultado = await completarCargaPendienteAction(idToken, pendingRecovery.transactionId, pin);
+      setPin('');
+
       showToast.dismiss(String(toastId));
 
-      if (firebaseResult.success) {
+      if (resultado.ok) {
         setPendingRecovery(null);
         setError('');
-        setSuccess(firebaseResult.already_applied
+        setSuccess(resultado.yaAplicada
           ? 'Esta transacción ya estaba aplicada'
           : '¡Crédito recuperado!');
         showToast.success('¡Crédito recuperado!');
         setTimeout(() => router.push('/'), 2000);
       } else {
-        showToast.error(firebaseResult.error || 'Error al recuperar');
+        setError(resultado.mensaje);
+        showToast.error(resultado.mensaje || 'Error al recuperar');
         setProcessing(false);
       }
     } catch (err: any) {
@@ -260,10 +262,21 @@ export default function RecargarBilleteraPage() {
                   </p>
                 </div>
               </div>
+              <input
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                value={pin}
+                onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+                placeholder="Tu clave de la billetera"
+                maxLength={6}
+                className="mt-3 w-full bg-slate-950/50 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-gray-600 text-center tracking-[0.4em] focus:outline-none focus:border-yellow-500 transition-colors"
+                disabled={processing}
+              />
               <button
                 onClick={handleRecuperacion}
                 disabled={processing}
-                className="mt-3 w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="mt-2 w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <FaRedo className={processing ? 'animate-spin' : ''} />
                 Reintentar acreditación
@@ -293,6 +306,26 @@ export default function RecargarBilleteraPage() {
                   disabled={processing}
                 />
               </div>
+            </div>
+
+            {/* Clave de la billetera (PIN): el banco la exige para cada débito, incluso en un reintento */}
+            <div>
+              <label htmlFor="pin-carga" className="block text-gray-300 font-medium mb-2 text-sm">
+                Tu clave de la billetera
+              </label>
+              <input
+                type="password"
+                id="pin-carga"
+                inputMode="numeric"
+                autoComplete="off"
+                value={pin}
+                onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+                placeholder="••••"
+                maxLength={6}
+                className="w-full bg-slate-950/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-center tracking-[0.5em] focus:outline-none focus:border-emerald-500 transition-colors text-lg font-mono"
+                required
+                disabled={processing}
+              />
             </div>
 
             {/* Montos rápidos */}
@@ -386,12 +419,24 @@ function RecargarModeDemo({ usuario, router }: { usuario: any; router: any }) {
   const handleDemo = async (e: React.FormEvent) => {
     e.preventDefault();
     setProcessing(true);
-    const { doc, updateDoc, increment } = await import('firebase/firestore');
-    const { db } = await import('@/lib/firebase/config');
-    const ref = doc(db, 'usuarios', usuario.uid);
-    await updateDoc(ref, { saldo: increment(parseFloat(monto)) });
-    showToast.success('Saldo Demo añadido');
-    router.push('/');
+    try {
+      // El saldo demo lo acredita el SERVIDOR y solo si el entorno lo permite
+      // (PLATAFORMA_MODO_DEMO=true). Antes esto escribía `saldo` desde el
+      // navegador: cualquiera podía darse el saldo que quisiera.
+      const idToken = await usuario.getIdToken();
+      const { recargaDemoAction } = await import('@/app/actions/plataforma-saldo');
+      const resultado = await recargaDemoAction(idToken, parseFloat(monto));
+
+      if (resultado.ok) {
+        showToast.success('Saldo Demo añadido');
+        router.push('/');
+        return;
+      }
+      showToast.error(resultado.mensaje);
+    } catch (err: any) {
+      showToast.error(err.message || 'Error inesperado');
+    }
+    setProcessing(false);
   };
 
   return (

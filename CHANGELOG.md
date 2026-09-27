@@ -7,6 +7,85 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [Sin publicar] - 2026-09-25
+
+### 🔒 Seguridad e integridad del dinero (revisión completa)
+
+Revisión a fondo del manejo de saldo. Ver `../PLAN_AKALLPA/01_REVISION_INVERSIONES_PRO.md` para el detalle.
+
+#### 🐛 Corregido
+
+- **El saldo ya no se puede escribir desde el navegador.** `usuarios.saldo` y
+  `usuarios.saldoRecaudado` pasan a ser de solo-servidor en `firestore.rules`.
+  Antes la regla dejaba al dueño escribir su propio saldo (para que la recarga
+  se acreditara desde el cliente) y cualquiera podía fijarse el saldo que
+  quisiera desde la consola y retirarlo a su billetera.
+- **Modo demo / rutas "legacy" que creaban saldo desde el cliente**
+  (`RecargarModeDemo`, retiro "demo" en `retirar-banco`, transferencia
+  "legacy" en `transferir`): ahora son Server Actions con Admin SDK; el modo
+  demo solo funciona con `PLATAFORMA_MODO_DEMO=true` en el servidor.
+- **Recarga en dos pasos con el segundo en el navegador**: ahora
+  `cargarAPlataformaAction` hace todo en el servidor con registro previo
+  (`plataforma_cargas/{llave}` en `pending`), idempotencia por llave y una
+  reserva de 60 s contra doble ejecución. Si no se puede confirmar, queda
+  pendiente y se completa con `completarCargaPendienteAction`.
+- **Retiro hacia la billetera creaba dinero ante un timeout**: si Odoo no
+  respondía, se devolvía el saldo en Firebase aunque Odoo pudiera haberlo
+  aplicado. Ahora solo se revierte si Odoo RECHAZA; si no se sabe, el retiro
+  queda `pending` con los fondos retenidos (`completarRetiroPendienteAction`).
+- **`eliminarInversionAction` creaba dinero** si el creador ya había depositado
+  lo recaudado, y **`invertirEnProyectoAction` dejaba dinero atrapado** en ese
+  caso: ambos se rechazan cuando el proyecto está liquidado o ya se depositó lo
+  recaudado.
+- **`aportarGanancia` (crear saldo de la nada) lo podía usar cualquier creador**
+  con un proyecto propio y un cómplice como inversor: ahora solo administradores
+  o `PLATAFORMA_MODO_DEMO=true`.
+- **Liquidación legacy descuadraba céntimos**: el reparto ahora usa el método
+  del mayor resto (`repartirEnCentavos`) y la suma pagada es exacta.
+- **Reglas de `productos`**: el gestor ya no puede editar desde el navegador
+  `inversores`, `estado`, `monto`, `depositoRecaudado`, `distribucionEjecutada`,
+  `creador`; `precio` y `comisionGestor` solo mientras no haya inversores; un
+  producto no puede crearse con inversores inventados o ya liquidado.
+- **Reglas `plataforma_cargas` / `plataforma_retiros`**: solo lectura para el
+  dueño (antes podía crear registros y modificar el monto de un retiro
+  pendiente); nueva colección `plataforma_transferencias` (solo lectura).
+- **Middleware**: `?token=cualquier-cosa` ya no sirve para saltarse la
+  comprobación de sesión en las rutas de dinero de la billetera.
+- **Votos**: el detalle del proyecto hacía `votos + 1` sobre un array de
+  votantes, corrompiéndolo a texto; ahora usa `arrayUnion` como el resto de la app.
+- Validación de montos en servidor (NaN, negativos, más de 2 decimales, topes).
+- El registro de billetera exige 8 caracteres (igual que `wallet_digital`).
+
+#### ✨ Agregado
+
+- `lib/plataforma-saldo.ts`, `lib/odoo-wallet.ts`, `app/actions/plataforma-saldo.ts`.
+- Reconciliación: detecta cargas `pending` atascadas (`carga_atascada`).
+- Historial de movimientos: las cargas muestran su estado real (pendiente/fallido).
+- `storage.rules`: propuesta de reglas de Firebase Storage (NO desplegada).
+- `PLATAFORMA_MODO_DEMO` en `.env.example`.
+
+#### 🗑️ Eliminado
+
+- `Validacion/{sumarSaldo,restarSaldo,restarSaldoAcumulado,sumarSaldoAcumulado,restarSaldoGanancia,enviarGanancia,acreditarDesdeBilletera}.ts`:
+  escribían saldo desde el navegador y ya no tienen llamadores.
+- `loadPlatformBalanceAction` (reemplazada por `cargarAPlataformaAction`).
+
+#### ⚠️ Antes de desplegar
+
+1. `firestore.rules` cambió: probar en el Simulador de reglas y desplegar
+   (`firebase deploy --only firestore:rules`) **junto** con el código nuevo — el código
+   viejo escribe `saldo` desde el navegador y dejaría de funcionar con las reglas nuevas.
+2. Para conservar el botón "Añadir saldo demo" en un entorno de PRUEBA:
+   `PLATAFORMA_MODO_DEMO=true` (variable de servidor). Dejarla sin definir en producción.
+3. Las Server Actions de dinero exigen `FIREBASE_SERVICE_ACCOUNT_KEY` en el hosting.
+
+#### 🧪 Pruebas
+
+- Unitarias: 98 → 128. Integración con emulador: 45 → 119 (carreras, idempotencia,
+  fallos de red simulados, reglas de seguridad, conservación del dinero).
+
+---
+
 ## [2.0.0] - 2026-05-30
 
 ### 🎉 Mejoras Mayores - Sistema de Gastos Transparente
