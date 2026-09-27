@@ -84,6 +84,25 @@ export async function loginAction(formData: FormData) {
             path: '/',
         });
 
+        // Vincula esta cuenta de billetera (WAL...) con el usuario de Firestore que la conectó — así el banco puede
+        // preguntar luego "¿qué tiene invertido esta cuenta?" (/api/inv/banco/resumen) sin que la billetera tenga
+        // que mandar ningún dato del inversionista. Es mejor esfuerzo: si falla, el login sigue siendo válido (solo
+        // no se vería el resumen de inversiones hasta la próxima conexión exitosa).
+        const cuenta = response.result.wallet?.number;
+        const firebaseIdToken = formData.get('firebaseIdToken');
+        if (typeof cuenta === 'string' && cuenta && typeof firebaseIdToken === 'string' && firebaseIdToken) {
+            try {
+                const { verificarIdToken, getAdminDb } = await import('@/lib/firebase/admin');
+                const { uid } = await verificarIdToken(firebaseIdToken);
+                await getAdminDb().collection('usuarios').doc(uid).set(
+                    { walletAccount: cuenta, walletLinkedAt: Date.now() },
+                    { merge: true }
+                );
+            } catch (error) {
+                console.error('[loginAction] No se pudo vincular la cuenta de billetera:', error);
+            }
+        }
+
         return { success: true };
     }
 

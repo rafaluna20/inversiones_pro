@@ -7,7 +7,7 @@
  *
  * Misma firma que usan todas las plataformas del banco: HMAC-SHA256 hex de "<timestamp>\n<ruta>\n<sha256(cuerpo)>".
  */
-import { createHash, createHmac } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 
 export interface ConfigBanco {
   url: string;
@@ -27,6 +27,26 @@ export function configBanco(env: Record<string, string | undefined> = process.en
 export function firmar(secreto: string, timestamp: number, ruta: string, cuerpo: string | Buffer): string {
   const digest = createHash('sha256').update(cuerpo).digest('hex');
   return createHmac('sha256', secreto).update(`${timestamp}\n${ruta}\n${digest}`).digest('hex');
+}
+
+const VENTANA_FIRMA_SEG = 300;
+
+/**
+ * Contraparte de `firmar` para las peticiones que el BANCO le hace a ESTA plataforma (p. ej. /api/inv/banco/resumen):
+ * cierto solo si `firma` es la que produce `firmar` con `secreto` y la hora está dentro de la ventana (±5 min).
+ * Compara en tiempo constante para no filtrar el secreto por temporización.
+ */
+export function verificarFirma(
+  secreto: string, timestamp: string | number | null | undefined, ruta: string, cuerpo: string | Buffer,
+  firma: string | null | undefined, ahora: number, ventana: number = VENTANA_FIRMA_SEG
+): boolean {
+  const ts = Number(timestamp);
+  if (!secreto || !Number.isFinite(ts) || typeof firma !== 'string' || !firma || Math.abs(ahora - ts) > ventana) {
+    return false;
+  }
+  const esperada = Buffer.from(firmar(secreto, ts, ruta, cuerpo));
+  const recibida = Buffer.from(firma.toLowerCase());
+  return esperada.length === recibida.length && timingSafeEqual(esperada, recibida);
 }
 
 export interface RespuestaBanco {
