@@ -19,6 +19,7 @@ export default function RecargarBilleteraPage() {
   const { isAuthenticated } = useTokenBilletera();
 
   const [monto, setMonto] = useState('');
+  const [pin, setPin] = useState('');
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -73,6 +74,10 @@ export default function RecargarBilleteraPage() {
       setError(`Saldo insuficiente en tu billetera. Disponible: S/ ${saldoOdoo.toFixed(2)}`);
       return;
     }
+    if (!/^\d{4,6}$/.test(pin)) {
+      setError('Ingresa tu clave de la billetera (4 a 6 dígitos).');
+      return;
+    }
 
     setProcessing(true);
     setError('');
@@ -81,10 +86,12 @@ export default function RecargarBilleteraPage() {
 
     try {
       // Todo el puente (débito en Odoo + crédito en la plataforma) ocurre en
-      // el SERVIDOR: el navegador ya no escribe saldo en Firestore.
+      // el SERVIDOR: el navegador ya no escribe saldo en Firestore. La clave
+      // viaja solo por este viaje al servidor: nunca se guarda en el navegador.
       const idToken = await usuario.getIdToken();
       const { cargarAPlataformaAction } = await import('@/app/actions/plataforma-saldo');
-      const resultado = await cargarAPlataformaAction(idToken, montoNum);
+      const resultado = await cargarAPlataformaAction(idToken, montoNum, pin);
+      setPin('');
 
       showToast.dismiss(String(toastId));
 
@@ -121,13 +128,18 @@ export default function RecargarBilleteraPage() {
 
   const handleRecuperacion = async () => {
     if (!pendingRecovery || !usuario) return;
+    if (!/^\d{4,6}$/.test(pin)) {
+      setError('Ingresa tu clave de la billetera para reintentar (4 a 6 dígitos).');
+      return;
+    }
     setProcessing(true);
     const toastId = showToast.loading('Recuperando crédito...');
 
     try {
       const idToken = await usuario.getIdToken();
       const { completarCargaPendienteAction } = await import('@/app/actions/plataforma-saldo');
-      const resultado = await completarCargaPendienteAction(idToken, pendingRecovery.transactionId);
+      const resultado = await completarCargaPendienteAction(idToken, pendingRecovery.transactionId, pin);
+      setPin('');
 
       showToast.dismiss(String(toastId));
 
@@ -250,10 +262,21 @@ export default function RecargarBilleteraPage() {
                   </p>
                 </div>
               </div>
+              <input
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                value={pin}
+                onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+                placeholder="Tu clave de la billetera"
+                maxLength={6}
+                className="mt-3 w-full bg-slate-950/50 border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder-gray-600 text-center tracking-[0.4em] focus:outline-none focus:border-yellow-500 transition-colors"
+                disabled={processing}
+              />
               <button
                 onClick={handleRecuperacion}
                 disabled={processing}
-                className="mt-3 w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="mt-2 w-full py-2.5 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <FaRedo className={processing ? 'animate-spin' : ''} />
                 Reintentar acreditación
@@ -283,6 +306,26 @@ export default function RecargarBilleteraPage() {
                   disabled={processing}
                 />
               </div>
+            </div>
+
+            {/* Clave de la billetera (PIN): el banco la exige para cada débito, incluso en un reintento */}
+            <div>
+              <label htmlFor="pin-carga" className="block text-gray-300 font-medium mb-2 text-sm">
+                Tu clave de la billetera
+              </label>
+              <input
+                type="password"
+                id="pin-carga"
+                inputMode="numeric"
+                autoComplete="off"
+                value={pin}
+                onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+                placeholder="••••"
+                maxLength={6}
+                className="w-full bg-slate-950/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 text-center tracking-[0.5em] focus:outline-none focus:border-emerald-500 transition-colors text-lg font-mono"
+                required
+                disabled={processing}
+              />
             </div>
 
             {/* Montos rápidos */}

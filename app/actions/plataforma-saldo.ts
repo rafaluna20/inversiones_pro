@@ -31,6 +31,15 @@ import {
   type DebitarBilletera,
   type ResultadoCarga,
 } from '@/lib/plataforma-saldo';
+import { configBanco } from '@/lib/wallet-signature';
+
+const RE_PIN = /^\d{4,6}$/;
+
+/** Código de plataforma tal como está registrado en el banco (wallet.platform.code). Único punto de la verdad: el
+ * mismo valor lo usa el pago (payout, firmado) en app/actions/wallet.ts. */
+function codigoPlataforma(): string {
+  return configBanco()?.codigo || 'inversiones_pro';
+}
 
 export interface ResultadoAccionSaldo {
   ok: boolean;
@@ -63,12 +72,17 @@ function aRespuestaCarga(r: ResultadoCarga): ResultadoAccionSaldo {
   return { ok: false, mensaje: r.error, pendiente: r.pendiente, llave: r.llave };
 }
 
-function debitorOdoo(uid: string, tokenBilletera: string): DebitarBilletera {
+/**
+ * Débito en la billetera del USUARIO (no en la del banco): usa /api/wallet/platform/deposit, con el token del propio
+ * usuario y su PIN. Reemplaza al endpoint retirado /api/wallet/platform-load (que debitaba sin PIN y sin que el
+ * banco supiera qué plataforma lo pedía de forma verificable).
+ */
+function debitorOdoo(tokenBilletera: string, pin: string): DebitarBilletera {
   return async (llave, monto) =>
     clasificarRespuestaMovimiento(
       await llamarBilleteraOdoo(
-        '/api/wallet/platform-load',
-        { amount: monto, firebase_uid: uid, platform: 'inversiones_pro', idempotency_key: llave },
+        '/api/wallet/platform/deposit',
+        { platform: codigoPlataforma(), amount: monto, idempotency_key: llave, pin, description: 'Carga a Inversiones Pro' },
         tokenBilletera
       )
     );
@@ -79,12 +93,16 @@ function debitorOdoo(uid: string, tokenBilletera: string): DebitarBilletera {
  * Todo el puente (débito en Odoo + crédito en Firestore) ocurre acá, en el
  * servidor, con registro previo e idempotencia. Ver procesarCargaPlataforma.
  */
-export async function cargarAPlataformaAction(idToken: string, monto: number): Promise<ResultadoAccionSaldo> {
+export async function cargarAPlataformaAction(idToken: string, monto: number, pin: string): Promise<ResultadoAccionSaldo> {
   const id = await uidVerificado(idToken);
   if ('error' in id) return { ok: false, mensaje: id.error };
 
   const validacion = validarMonto(monto, CARGA_MINIMA);
   if (!validacion.ok) return { ok: false, mensaje: validacion.error };
+
+  if (typeof pin !== 'string' || !RE_PIN.test(pin)) {
+    return { ok: false, mensaje: 'Ingresa tu clave de la billetera (4 a 6 dígitos).' };
+  }
 
   const tokenBilletera = cookies().get(COOKIE_SESION_BILLETERA)?.value;
   if (!tokenBilletera) return { ok: false, mensaje: 'No autenticado en la billetera. Conéctala primero.' };
@@ -96,7 +114,7 @@ export async function cargarAPlataformaAction(idToken: string, monto: number): P
       uid: id.uid,
       llave,
       monto: validacion.monto,
-      debitar: debitorOdoo(id.uid, tokenBilletera),
+      debitar: debitorOdoo(tokenBilletera, pin),
     })
   );
 }
@@ -105,13 +123,17 @@ export async function cargarAPlataformaAction(idToken: string, monto: number): P
  * Retoma una carga que quedó a medias (Odoo pudo haber debitado pero falta
  * acreditar). Es seguro llamarla varias veces: usa la misma llave de
  * idempotencia y el monto GUARDADO en el registro, nunca uno enviado ahora.
+ * El banco valida el PIN en cada llamada (incluso en un reintento idempotente), así que hay que volver a pedirlo.
  */
-export async function completarCargaPendienteAction(idToken: string, llave: string): Promise<ResultadoAccionSaldo> {
+export async function completarCargaPendienteAction(idToken: string, llave: string, pin: string): Promise<ResultadoAccionSaldo> {
   const id = await uidVerificado(idToken);
   if ('error' in id) return { ok: false, mensaje: id.error };
 
   if (typeof llave !== 'string' || !/^[A-Za-z0-9_-]{8,200}$/.test(llave)) {
     return { ok: false, mensaje: 'Código de recuperación inválido.' };
+  }
+  if (typeof pin !== 'string' || !RE_PIN.test(pin)) {
+    return { ok: false, mensaje: 'Ingresa tu clave de la billetera (4 a 6 dígitos).' };
   }
 
   const tokenBilletera = cookies().get(COOKIE_SESION_BILLETERA)?.value;
@@ -123,7 +145,7 @@ export async function completarCargaPendienteAction(idToken: string, llave: stri
       llave,
       monto: 0, // se ignora: se usa el monto guardado en el registro
       soloExistente: true,
-      debitar: debitorOdoo(id.uid, tokenBilletera),
+      debitar: debitorOdoo(tokenBilletera, pin),
     })
   );
 }

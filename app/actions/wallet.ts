@@ -9,6 +9,7 @@ import {
     llamarBilleteraOdoo,
 } from '@/lib/odoo-wallet';
 import { validarMonto } from '@/lib/plataforma-saldo';
+import { llamarBancoFirmado } from '@/lib/wallet-signature';
 
 const COOKIE_NAME = COOKIE_SESION_BILLETERA;
 
@@ -183,8 +184,26 @@ export async function withdrawFromPlatformAction(amountSolicitado: number, idTok
 }
 
 /**
- * Llama a Odoo con la clave de idempotencia del retiro y cierra el registro
- * según la respuesta. Compartido por el retiro nuevo y por la recuperación.
+ * Cuenta de billetera (WAL...) del usuario de ESTA sesión (la que abrió con su token en `billetera_session`).
+ * El pago a Odoo (`/platform/payout`) lo firma la plataforma, no el usuario — pero el DESTINO tiene que ser SU
+ * cuenta, nunca una que el cliente pueda declarar: por eso se obtiene aquí, del banco, con su propio token.
+ */
+async function cuentaDelUsuario(): Promise<{ ok: true; numero: string } | { ok: false; mensaje: string }> {
+    const respuesta = await odooCall('/api/wallet/account');
+    const numero = respuesta.result?.success ? respuesta.result?.account?.number : undefined;
+    if (typeof numero !== 'string' || !numero) {
+        return { ok: false, mensaje: 'No autenticado en la billetera. Conéctala primero.' };
+    }
+    return { ok: true, numero };
+}
+
+/**
+ * Llama al banco con la clave de idempotencia del retiro y cierra el registro según la respuesta. Compartido por
+ * el retiro nuevo y por la recuperación.
+ *
+ * El pago (`/platform/payout`) lo firma esta plataforma con su secreto — el banco NUNCA acepta que el destino de un
+ * pago lo declare quien llama sin firma (por eso se retiró /platform-withdraw, que acreditaba a cualquiera con el
+ * monto que él mismo mandaba).
  */
 async function resolverRetiro(p: {
     firebaseUid: string;
@@ -194,11 +213,27 @@ async function resolverRetiro(p: {
 }): Promise<ResultadoRetiroPlataforma> {
     const { revertirRetiro, confirmarRetiroExitoso } = await import('@/Validacion/retirarHaciaBilletera');
 
+    const cuenta = await cuentaDelUsuario();
+    if (!cuenta.ok) {
+        // Nunca se llegó a llamar al banco (no sabemos a qué cuenta pagar): es seguro devolver el dinero YA, en vez
+        // de dejarlo 'pending' esperando una reconexión que puede no llegar pronto.
+        const rollbackResult = await revertirRetiro(p.firebaseUid, p.amount, p.transactionId, cuenta.mensaje);
+        if (!rollbackResult.success) {
+            console.error(`[Bridge Withdraw] CRÍTICO: Rollback falló (sin cuenta de banco). TxID: ${p.transactionId}`);
+            return {
+                success: false, critical_error: true, transaction_id: p.transactionId,
+                message: `Hubo un error grave. Tu dinero está seguro pero requiere revisión manual. Código: ${p.transactionId}`,
+            };
+        }
+        return { success: false, message: cuenta.mensaje };
+    }
+
     const movimiento = clasificarRespuestaMovimiento(
-        await odooCall('/api/wallet/platform-withdraw', {
+        await llamarBancoFirmado('/api/wallet/platform/payout', {
+            account_number: cuenta.numero,
             amount: p.amount,
-            firebase_uid: p.firebaseUid,
             idempotency_key: p.transactionId,
+            description: 'Retiro desde Inversiones Pro',
         })
     );
 

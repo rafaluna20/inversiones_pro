@@ -106,7 +106,10 @@ export function clasificarRespuestaMovimiento(respuesta: RespuestaOdoo): Resulta
       // indeterminado, jamás como éxito ni como fallo.
       return { estado: 'indeterminado', mensaje: 'La billetera confirmó sin datos de la transacción' };
     }
-    return { estado: 'ok', transactionId, monto, nuevoSaldo: typeof r.new_balance === 'number' ? r.new_balance : undefined };
+    // Los endpoints nuevos (/platform/deposit, /platform/payout) devuelven `balance`; se acepta `new_balance` por si
+    // algún día vuelve a haber un endpoint con ese nombre de campo.
+    const saldo = r.balance ?? r.new_balance;
+    return { estado: 'ok', transactionId, monto, nuevoSaldo: typeof saldo === 'number' ? saldo : undefined };
   }
 
   if (r.success === false) {
