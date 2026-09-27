@@ -90,6 +90,11 @@ export async function loginAction(formData: FormData) {
         // no se vería el resumen de inversiones hasta la próxima conexión exitosa).
         const cuenta = response.result.wallet?.number;
         const firebaseIdToken = formData.get('firebaseIdToken');
+        // Diagnóstico temporal (sin datos sensibles): para saber POR QUÉ no se vincula sin tener que adivinar.
+        console.log('[loginAction] vinculación:', {
+            tieneCuenta: typeof cuenta === 'string' && Boolean(cuenta),
+            tieneIdToken: typeof firebaseIdToken === 'string' && Boolean(firebaseIdToken),
+        });
         if (typeof cuenta === 'string' && cuenta && typeof firebaseIdToken === 'string' && firebaseIdToken) {
             try {
                 const { verificarIdToken, getAdminDb } = await import('@/lib/firebase/admin');
@@ -98,6 +103,7 @@ export async function loginAction(formData: FormData) {
                     { walletAccount: cuenta, walletLinkedAt: Date.now() },
                     { merge: true }
                 );
+                console.log('[loginAction] cuenta vinculada correctamente');
             } catch (error) {
                 console.error('[loginAction] No se pudo vincular la cuenta de billetera:', error);
             }
