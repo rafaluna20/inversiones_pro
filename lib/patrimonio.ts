@@ -5,9 +5,8 @@
  *
  * Modelo de datos de Inversiones Pro (a diferencia del ledger de movimientos de akallpa_inversionistas en Odoo): cada
  * proyecto (`productos/{id}`) guarda a sus inversores en su propio array `inversores[]` (participación en "cubos",
- * 100 = 100% financiado). Al liquidar un proyecto, la ganancia de CADA inversor se escribe en su propia entrada de
- * ese array (`gananciaReal`, `roiReal`) — no existe un libro de movimientos histórico, así que no hay evolución
- * mensual que mostrar todavía (`evolucion` se deja vacío a propósito, en vez de inventar una).
+ * 100 = 100% financiado). No existe un libro de movimientos histórico, así que no hay evolución mensual que mostrar
+ * todavía (`evolucion` se deja vacío a propósito, en vez de inventar una).
  *
  * Convención (igual que el resumen de akallpa_inversionistas, para que la billetera los muestre igual):
  * - "capital": dinero AÚN invertido a costo (0 una vez liquidado: ya volvió como saldo o ganancia).
@@ -15,12 +14,19 @@
  *   esta plataforma paga todo de una vez al liquidar, no hay repartos parciales en el camino.
  * - "proyectos_historicos": el total de proyectos en los que la persona ha invertido alguna vez (no solo los
  *   liquidados): es "cuántos", no "cuántos ya terminaron".
+ *
+ * Ganancia de un proyecto liquidado: `producto.inversores[].gananciaReal` NO es la fuente de verdad, aunque exista
+ * (algunos proyectos la tienen escrita por `ejecutarDistribucionAction`, otros no). `app/mis-inversiones/page.tsx` —
+ * la pantalla que el inversionista realmente ve en Inversiones Pro — jamás lee ese campo: siempre recalcula la
+ * ganancia de cada quien al vuelo a partir de `producto.monto` (valor de venta), `producto.precio` (capital
+ * original) y `producto.totalGastos`, repartido proporcional a sus cubos sobre el total de cubos vendidos. Este
+ * archivo reproduce EXACTAMENTE esa misma fórmula para que la billetera nunca muestre un número distinto al que ya
+ * ve el inversionista en su propia plataforma (confirmado con un caso real: "casa de remate judicial-chimbote").
  */
 
 export interface InversorDeProducto {
   usuarioId: string;
   cubos: number;
-  gananciaReal?: number;
 }
 
 export interface ProductoParaResumen {
@@ -28,6 +34,7 @@ export interface ProductoParaResumen {
   nombre?: string;
   precio?: number | string;
   monto?: number | string;
+  totalGastos?: number | string;
   /** true = activo, false = liquidado (Producto.estado en types/index.ts). */
   estado: boolean;
   distribucionEjecutada?: boolean;
@@ -90,7 +97,18 @@ export function calcularResumenPatrimonio(
     const precioTotal = numero(producto.precio) || numero(producto.monto);
     const capitalInvertido = round2((propia.cubos * precioTotal) / 100);
     const liquidado = producto.estado === false || producto.distribucionEjecutada === true;
-    const ganancia = round2(numero(propia.gananciaReal));
+
+    // Recalculado al vuelo (ver nota de arriba): nunca se lee propia.gananciaReal directamente.
+    let ganancia = 0;
+    if (liquidado) {
+      const valorVentaTotal = numero(producto.monto) || numero(producto.precio);
+      const capitalOriginal = numero(producto.precio);
+      const totalCubosVendidos = producto.inversores?.reduce((s, inv) => s + numero(inv.cubos), 0) || 100;
+      const porcentajeParticipacion = totalCubosVendidos > 0 ? propia.cubos / totalCubosVendidos : 0;
+      const gastosTotales = numero(producto.totalGastos);
+      const gananciaTotalProyecto = valorVentaTotal - capitalOriginal - gastosTotales;
+      ganancia = round2(gananciaTotalProyecto * porcentajeParticipacion);
+    }
 
     contratos.push({
       proyecto_id: producto.id,
