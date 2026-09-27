@@ -52,6 +52,9 @@ export default function BilleteraPage() {
     const formData = new FormData();
     formData.append('email', loginEmail);
     formData.append('password', loginPassword);
+    // Con esto, loginAction vincula tu cuenta de billetera a tu perfil de Inversiones Pro: así el banco puede
+    // mostrar tu patrimonio invertido en su propia pestaña "Inversiones", sin que esta app le mande ningún dato tuyo.
+    if (usuario) formData.append('firebaseIdToken', await usuario.getIdToken());
 
     try {
       const success = await loginBilletera(formData);

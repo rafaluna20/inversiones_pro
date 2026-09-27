@@ -6,7 +6,7 @@
  * Firma de servidor con el banco: mismo HMAC que usan todas las plataformas del ecosistema (control-app, wallet_digital,
  * utility_payment). El vector de prueba es compartido con ellas: si aquí da el mismo hash, la firma es interoperable.
  */
-import { configBanco, firmar, llamarBancoFirmado } from '@/lib/wallet-signature';
+import { configBanco, firmar, llamarBancoFirmado, verificarFirma } from '@/lib/wallet-signature';
 
 describe('firmar (vector compartido con el resto del ecosistema)', () => {
   test('HMAC-SHA256 de "<timestamp>\\n<ruta>\\n<sha256(cuerpo)>"', () => {
@@ -70,5 +70,41 @@ describe('llamarBancoFirmado', () => {
     const fetchFalso = jest.fn().mockRejectedValue(new Error('caída'));
     const r = await llamarBancoFirmado('/api/wallet/platform/payout', {}, config, fetchFalso);
     expect(r.error?.message).toBeTruthy();
+  });
+});
+
+describe('verificarFirma (contraparte de firmar: la usa /api/inv/banco/resumen para validar al banco)', () => {
+  const SECRETO = 'secreto-de-prueba-compartido';
+  const RUTA = '/api/inv/banco/resumen';
+  const CUERPO = '{"jsonrpc":"2.0","method":"call","params":{"account_number":"WAL00000001"}}';
+  const AHORA = 1790000000;
+  const FIRMA_VALIDA = firmar(SECRETO, AHORA, RUTA, CUERPO);
+
+  test('acepta la firma correcta dentro de la ventana de tiempo', () => {
+    expect(verificarFirma(SECRETO, AHORA, RUTA, CUERPO, FIRMA_VALIDA, AHORA)).toBe(true);
+    expect(verificarFirma(SECRETO, String(AHORA), RUTA, CUERPO, FIRMA_VALIDA.toUpperCase(), AHORA)).toBe(true); // mayúsculas también
+  });
+
+  test('rechaza secreto, ruta, cuerpo o firma distintos', () => {
+    expect(verificarFirma('otro-secreto', AHORA, RUTA, CUERPO, FIRMA_VALIDA, AHORA)).toBe(false);
+    expect(verificarFirma(SECRETO, AHORA, '/otra-ruta', CUERPO, FIRMA_VALIDA, AHORA)).toBe(false);
+    expect(verificarFirma(SECRETO, AHORA, RUTA, 'otro cuerpo', FIRMA_VALIDA, AHORA)).toBe(false);
+    expect(verificarFirma(SECRETO, AHORA, RUTA, CUERPO, '0'.repeat(64), AHORA)).toBe(false);
+  });
+
+  test('rechaza fuera de la ventana de ±5 minutos', () => {
+    expect(verificarFirma(SECRETO, AHORA, RUTA, CUERPO, FIRMA_VALIDA, AHORA + 299)).toBe(true);
+    expect(verificarFirma(SECRETO, AHORA, RUTA, CUERPO, FIRMA_VALIDA, AHORA + 301)).toBe(false);
+    expect(verificarFirma(SECRETO, AHORA, RUTA, CUERPO, FIRMA_VALIDA, AHORA - 301)).toBe(false);
+  });
+
+  test('entradas mal formadas nunca lanzan: se rechazan', () => {
+    for (const timestamp of [undefined, null, '', 'no-numero', NaN]) {
+      expect(verificarFirma(SECRETO, timestamp as any, RUTA, CUERPO, FIRMA_VALIDA, AHORA)).toBe(false);
+    }
+    for (const firma of [undefined, null, '', 123 as any]) {
+      expect(verificarFirma(SECRETO, AHORA, RUTA, CUERPO, firma, AHORA)).toBe(false);
+    }
+    expect(verificarFirma('', AHORA, RUTA, CUERPO, FIRMA_VALIDA, AHORA)).toBe(false);
   });
 });
