@@ -13,7 +13,7 @@ import { FaWallet, FaArrowUp, FaArrowDown, FaExchangeAlt, FaHistory, FaUniversit
 
 export default function BilleteraPage() {
   const { usuario, loading } = useAutenticacion();
-  const { isAuthenticated, loginBilletera } = useTokenBilletera();
+  const { isAuthenticated, loginBilletera, logout: logoutBilletera } = useTokenBilletera();
 
   // Estados para validación y datos
   const [saldo, setSaldo] = useState(0);
@@ -403,7 +403,31 @@ export default function BilleteraPage() {
                               {formatCurrency(saldo)}
                             </h3>
                           </div>
-                          <p className="text-gray-500 text-[10px] mt-4 pointer-events-none">Hacer clic para ver transferencias y cobros externos</p>
+                          <div className="mt-4 flex items-center justify-between">
+                            <p className="text-gray-500 text-[10px] pointer-events-none">Hacer clic para ver transferencias y cobros externos</p>
+                            {/* Antes no había forma de reconectar sin borrar cookies a mano: si el vínculo con Inversiones Pro no
+                                quedó guardado (p. ej. se conectó antes de tener sesión iniciada aquí), esto permite reintentarlo.
+                                Un <span role="button"> en vez de <button>: la tarjeta que lo contiene YA es un <button>, y HTML
+                                no permite anidar botones. */}
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                logoutBilletera();
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  logoutBilletera();
+                                }
+                              }}
+                              className="relative z-10 cursor-pointer text-[10px] font-semibold text-gray-500 underline hover:text-gray-300"
+                            >
+                              Desconectar
+                            </span>
+                          </div>
                         </div>
                       ) : (
                         <div className="flex flex-col h-full justify-between w-full">
