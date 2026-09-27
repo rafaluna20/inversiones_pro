@@ -20,9 +20,9 @@ const activo2: ProductoParaResumen = {
   inversores: [{ usuarioId: UID, cubos: 50 }],
 };
 const liquidado: ProductoParaResumen = {
-  id: 'prod-liquidado', nombre: 'Los Pinos', precio: 8000, estado: false, distribucionEjecutada: true,
+  id: 'prod-liquidado', nombre: 'Los Pinos', precio: 8000, monto: 8320.5, estado: false, distribucionEjecutada: true,
   fechaDistribucion: new Date('2026-09-10T12:00:00Z').getTime(),
-  inversores: [{ usuarioId: UID, cubos: 40, gananciaReal: 320.5 }],
+  inversores: [{ usuarioId: UID, cubos: 40 }],
 };
 const noInvolucrado: ProductoParaResumen = {
   id: 'prod-ajeno', nombre: 'Otro', precio: 1000, estado: true, inversores: [{ usuarioId: OTRO, cubos: 100 }],
@@ -102,5 +102,48 @@ describe('calcularResumenPatrimonio', () => {
     const r = calcularResumenPatrimonio(0, escenario, UID);
     expect(r.moneda).toBe('PEN');
     expect(JSON.stringify(r)).not.toContain(OTRO);
+  });
+
+  describe('ganancia de un proyecto liquidado: recalculada igual que app/mis-inversiones/page.tsx', () => {
+    test('nunca lee producto.inversores[].gananciaReal (esa fuente no es confiable): la calcula de monto/precio/gastos', () => {
+      const producto: ProductoParaResumen = {
+        id: 'p1', precio: 8000, monto: 8320.5, estado: false,
+        inversores: [{ usuarioId: UID, cubos: 40 }],
+      };
+      const r = calcularResumenPatrimonio(0, [producto], UID);
+      expect(r.contratos[0].resultado).toBe(320.5);
+    });
+
+    test('se reparte proporcional a los cubos de cada quien sobre el total de cubos vendidos, no sobre 100', () => {
+      // Caso real: "casa de remate judicial-chimbote". Capital total 87904, valor de venta 126430.24 (sin gastos
+      // aparte), un inversor con 18593.19 de capital (21.1503...% del total) debe recibir 8148.95 de ganancia.
+      const producto: ProductoParaResumen = {
+        id: 'p-chimbote', precio: 87904, monto: 126430.24, estado: false, distribucionEjecutada: true,
+        inversores: [
+          { usuarioId: UID, cubos: (18593.19 / 87904) * 100 },
+          { usuarioId: OTRO, cubos: 100 - (18593.19 / 87904) * 100 },
+        ],
+      };
+      const r = calcularResumenPatrimonio(0, [producto], UID);
+      expect(r.contratos[0].aportado).toBeCloseTo(18593.19, 1);
+      expect(r.contratos[0].resultado).toBeCloseTo(8148.95, 1);
+    });
+
+    test('totalGastos, cuando existe, se descuenta de la ganancia total antes de repartir', () => {
+      const producto: ProductoParaResumen = {
+        id: 'p2', precio: 1000, monto: 1500, totalGastos: 100, estado: false,
+        inversores: [{ usuarioId: UID, cubos: 100 }],
+      };
+      // ganancia total = (1500 - 1000) - 100 = 400, íntegra para el único inversor (100% de los cubos)
+      expect(calcularResumenPatrimonio(0, [producto], UID).contratos[0].resultado).toBe(400);
+    });
+
+    test('mientras el proyecto sigue activo, la ganancia no se calcula (queda en 0) aunque ya haya monto/gastos cargados', () => {
+      const producto: ProductoParaResumen = {
+        id: 'p3', precio: 1000, monto: 1500, estado: true,
+        inversores: [{ usuarioId: UID, cubos: 100 }],
+      };
+      expect(calcularResumenPatrimonio(0, [producto], UID).contratos[0].resultado).toBe(0);
+    });
   });
 });
